@@ -1,5 +1,4 @@
 package poller
 
-type Poller interface {
-	New(size int)
-}
+var WaitEventsBegin = 16
+

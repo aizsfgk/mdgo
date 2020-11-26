@@ -25,7 +25,7 @@ func newOption(optCb ...OptionCallback) *Option {
 	}
 
 	if len(opt.Addr) == 0 {
-		opt.Addr = ":9292"
+		opt.Addr = ":19292"
 	}
 
 	return &opt

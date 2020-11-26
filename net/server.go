@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"runtime"
 	"syscall"
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 
-	"github.com/aizsfgk/mdgo/net/listener"
+	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/connection"
 	"github.com/aizsfgk/mdgo/net/eventloop"
+	"github.com/aizsfgk/mdgo/net/listener"
 )
 
 type Handler interface {
@@ -60,10 +60,11 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 	}
 
 	wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
-	for i:=0; i<serv.option.NumLoop; i++ {
+	for i := 0; i < serv.option.NumLoop; i++ {
 		loop, err := eventloop.New()
 		if err != nil {
-			for j:=0; j<i; j++ {
+			fmt.Println("wloops-err:", wloops)
+			for j := 0; j < i; j++ {
 				wloops[i].Stop()
 			}
 			return nil, err
@@ -75,8 +76,26 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 	return
 }
 
-func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) {
+func (serv *Server) nextLoop() *eventloop.EventLoop {
+	loop := serv.worksLoop[serv.nextLoopIndex]
+	serv.nextLoopIndex = (serv.nextLoopIndex + 1) % len(serv.worksLoop)
+	return loop
+}
 
+func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
+	loop := serv.nextLoop()
+
+	// 新建连接
+	conn, err := connection.New(fd, loop, sa)
+	if err != nil {
+		fmt.Println("handleNewConnection:err: ", err)
+		return err
+	}
+
+	// 执行回调
+	serv.handler.OnConnection(conn)
+
+	return loop.AddSocketAndEnableRead(fd, conn)
 }
 
 func (serv *Server) Start() (err error) {

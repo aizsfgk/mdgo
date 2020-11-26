@@ -2,20 +2,20 @@ package listener
 
 import (
 	"fmt"
-
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
+	"github.com/aizsfgk/mdgo/net/event"
 	"net"
 	"os"
 	"syscall"
 
+	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/net/eventloop"
 )
 
-type HandlerConnFunc func(fd int, unix syscall.Sockaddr)
+type HandlerConnFunc func(fd int, sa syscall.Sockaddr) error
 
 type Listener struct {
 	file *os.File
-	fd int
+	listenFd int
 	handleC HandlerConnFunc
 	listener net.Listener
 	loop *eventloop.EventLoop
@@ -26,7 +26,8 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 		listener net.Listener
 		err error
 	)
-
+	fmt.Println("network:", network)
+	fmt.Println("addr:", addr)
 	listener, err = net.Listen(network, addr)
 	if err != nil {
 		return nil, err
@@ -37,31 +38,48 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 	}
 
 	file, err := l.File()  /// 这里会发生FD dup; 文件描述符+1 TODO
-	fmt.Printf("file:%#v\n", file)
+	fmt.Printf("file:%#v\n", *file)
 	if err != nil {
 		return nil, err
 	}
 
 	fd := int(file.Fd())
-	fmt.Println("fd: ", fd)
-	if err = syscall.SetNonblock(fd, true); err != nil {
+	fmt.Println("New - fd: ", fd)
+	if err = syscall.SetNonblock(fd, true); err != nil { // 设置了非阻塞
 		return nil, err
 	}
 
 	return &Listener{
 		file: file,
-		fd: fd,
+		listenFd: fd,
 		handleC: handleConn,
 		listener: listener,
 		loop: loop,
 	}, nil
 }
 
+func (l *Listener) HandleEvent(fd int, eve event.Event) error {
+	if eve & event.EventRead != 0 {
+		connFd, sa, err := syscall.Accept4(fd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
+		if err != nil {
+			if err != syscall.EAGAIN {
+				fmt.Println("accept4-err:", err.Error())
+				return nil
+			}
+			return err
+		}
+		fmt.Println("connFd: ", connFd)
+		return l.handleC(connFd, sa)
+	}
+	return nil
+}
+
 func (l *Listener) Fd() int {
-	return l.fd
+	return l.listenFd
 }
 
 func (l *Listener) Close() error {
+	l.loop.DeleteInLoop(l.listenFd)
 	return nil
 }
 

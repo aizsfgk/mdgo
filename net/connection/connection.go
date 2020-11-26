@@ -2,7 +2,9 @@ package connection
 
 import (
 	"bufio"
+	"github.com/aizsfgk/mdgo/net/event"
 	"net"
+	"syscall"
 
 	"github.com/aizsfgk/mdgo/net/eventloop"
 )
@@ -17,17 +19,29 @@ const (
 )
 
 type Connection struct {
-	sockFd int
+	connFd int
 	state ConnState
 	br bufio.Reader
 	bw bufio.Writer
 
-	localAddr *net.Addr
 	peerAddr net.Addr
 	eventLoop *eventloop.EventLoop
 }
 
 
+func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr) (*Connection, error) {
+	return nil, nil
+}
+
+
 func (conn *Connection) Fd() int {
-	return conn.sockFd
+	return conn.connFd
+}
+
+func (conn *Connection) Close() error {
+	return nil
+}
+
+func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
+	return nil
 }

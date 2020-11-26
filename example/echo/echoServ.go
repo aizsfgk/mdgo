@@ -17,23 +17,21 @@ func (e *echoHandler) OnEventLoopInit(conn *connection.Connection) {
 }
 
 func (e *echoHandler)  OnConnection(conn *connection.Connection) {
-	fmt.Println("OnEventLoopInit")
+	fmt.Println("OnConnection")
 }
 
 func (e *echoHandler) OnMessage(conn *connection.Connection) {
-	fmt.Println("OnEventLoopInit")
+	fmt.Println("OnMessage")
 }
 
 func (e *echoHandler) OnWriteComplete(conn *connection.Connection) {
-	fmt.Println("OnEventLoopInit")
+	fmt.Println("OnWriteComplete")
 }
 func (e *echoHandler) OnClose(conn *connection.Connection) {
-	fmt.Println("OnEventLoopInit")
+	fmt.Println("OnClose")
 }
 
 func main()  {
-
-
 
 	loop, err := eventloop.New()
 	if err != nil {

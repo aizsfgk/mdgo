@@ -55,37 +55,45 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		return nil, err
 	}
 
-	if serv.option.NumLoop <= 0 {
+	if serv.option.NumLoop > runtime.NumCPU() {
 		serv.option.NumLoop = runtime.NumCPU()
 	}
 
-	wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
-	for i := 0; i < serv.option.NumLoop; i++ {
-		loop, err := eventloop.New()
-		if err != nil {
-			fmt.Println("wloops-err:", wloops)
-			for j := 0; j < i; j++ {
-				wloops[i].Stop()
+	if serv.option.NumLoop > 0 {
+		wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
+		for i := 0; i < serv.option.NumLoop; i++ {
+			loop, err := eventloop.New()
+			if err != nil {
+				fmt.Println("wloops-err:", wloops)
+				for j := 0; j < i; j++ {
+					wloops[i].Stop()
+				}
+				return nil, err
 			}
-			return nil, err
+			wloops[i] = loop
 		}
-		wloops[i] = loop
+		serv.worksLoop = wloops
 	}
-	serv.worksLoop = wloops
 
 	return
 }
 
 func (serv *Server) nextLoop() *eventloop.EventLoop {
+	if serv.worksNum == 0 {
+		return serv.mainLoop
+	}
 	loop := serv.worksLoop[serv.nextLoopIndex]
 	serv.nextLoopIndex = (serv.nextLoopIndex + 1) % len(serv.worksLoop)
 	return loop
 }
 
 func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
+	fmt.Println("handleNewConnection start")
 	loop := serv.nextLoop()
 
 	// 新建连接
+	//
+	// Connection 是对 TCP连接的抽象
 	conn, err := connection.New(fd, loop, sa)
 	if err != nil {
 		fmt.Println("handleNewConnection:err: ", err)
@@ -100,6 +108,9 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 
 func (serv *Server) Start() (err error) {
 	fmt.Println("server start")
+
+	serv.mainLoop.Loop()
+
 	return
 }
 

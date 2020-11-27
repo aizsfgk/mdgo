@@ -38,7 +38,6 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 	}
 
 	file, err := l.File()  /// 这里会发生FD dup; 文件描述符+1 TODO
-	fmt.Printf("file:%#v\n", *file)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +58,11 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 }
 
 func (l *Listener) HandleEvent(fd int, eve event.Event) error {
+	fmt.Println("listener HandleEvent")
 	if eve & event.EventRead != 0 {
 		connFd, sa, err := syscall.Accept4(fd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
 		if err != nil {
-			if err != syscall.EAGAIN {
+			if err == syscall.EAGAIN { // EAGAIN : 表示资源临时不可用
 				fmt.Println("accept4-err:", err.Error())
 				return nil
 			}

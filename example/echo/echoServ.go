@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/aizsfgk/mdgo/net"
-	"github.com/aizsfgk/mdgo/net/eventloop"
 	"github.com/aizsfgk/mdgo/net/connection"
 )
 
@@ -33,14 +32,8 @@ func (e *echoHandler) OnClose(conn *connection.Connection) {
 
 func main()  {
 
-	loop, err := eventloop.New()
-	if err != nil {
-		fmt.Println("loop-err: ", err)
-		return
-	}
 
 	var eh = &echoHandler{}
-
 	serv, err := net.NewServer(eh, net.ReusePort(true), net.KeepAlive(10 * time.Minute))
 	if err != nil{
 		fmt.Println("server-err: ", err)
@@ -48,6 +41,5 @@ func main()  {
 	}
 
 	serv.Start()
-	loop.Loop()
 	
 }

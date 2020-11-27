@@ -26,11 +26,8 @@ type Poller struct {
 // 创建
 func Create() (*Poller, error) {
 	epFd, err := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC)
-	fmt.Println("epFd: ", epFd)
 	if err != nil {
-		return nil, err
-	}
-	if err != nil {
+		fmt.Println("Create-err: ", err)
 		syscall.Close(epFd)
 		return nil, err
 	}
@@ -48,9 +45,6 @@ func (p *Poller) Close() error {
 // ***************** 操作 - 私有方法 ***************** //
 // 增加事件
 func (p *Poller) add(fd int, events uint32) error {
-	fmt.Println("epoll-add-fd: ", fd)
-	fmt.Println("events: ", events)
-
 	return syscall.EpollCtl(p.epFd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{
 		Events: events,
 		Fd:     int32(fd),
@@ -105,10 +99,9 @@ func (p *Poller) EnableReadWrite(fd int) error {
 func (p *Poller) Poll(msec int, acp *[]*event.Ev) {
 	events := make([]syscall.EpollEvent, WaitEventsBegin)
 
-	n, err := syscall.EpollWait(p.epFd, events, 10000) // 事件就绪
-	fmt.Println("n: ", n)
+	n, err := syscall.EpollWait(p.epFd, events, msec) // 事件就绪
 	if err != nil && err != syscall.EAGAIN {
-		fmt.Println("epollwait err: ", err)
+		fmt.Println("epollWait-err: ", err)
 		return
 	}
 

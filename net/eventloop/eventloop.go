@@ -35,7 +35,7 @@ func New() (el *EventLoop, err error) {
 }
 
 func (el *EventLoop) AddSocketAndEnableRead(fd int, sc SocketCtx) error {
-	fmt.Println("AddSocketAndEnableRead-fd: ", fd)
+
 	var err error
 	el.socketCtx[fd] = sc
 
@@ -44,7 +44,6 @@ func (el *EventLoop) AddSocketAndEnableRead(fd int, sc SocketCtx) error {
 		el.Poll.Del(fd)
 		return err
 	}
-	fmt.Println("add yes")
 	return nil
 }
 
@@ -56,6 +55,15 @@ func (el *EventLoop) Stop() error {
 		delete(el.socketCtx, fd)
 	}
 	return el.Poll.Close()
+}
+
+func (el *EventLoop) debugPrintf(evs *[]*event.Ev) {
+	fmt.Printf("\n==========================\n")
+	fmt.Printf(" revent-print: \n")
+	for _, ev := range *evs {
+		fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+	}
+	fmt.Printf("==========================\n")
 }
 
 // 开启事件循环
@@ -70,9 +78,9 @@ func (el *EventLoop) Loop() {
 		el.Poll.Poll(10000, &activeConn)
 
 		if len(activeConn) > 0 {
-			fmt.Println("activeConn-len>0")
-			el.eventHandling.Set(true)
+			el.debugPrintf(&activeConn)
 
+			el.eventHandling.Set(true)
 			for _, curEv := range activeConn {
 				if sc, ok := el.socketCtx[curEv.Fd]; ok {
 					err := sc.HandleEvent(curEv.Fd, curEv.Revent)
@@ -81,7 +89,6 @@ func (el *EventLoop) Loop() {
 					}
 				}
 			}
-
 			el.eventHandling.Set(false)
 		}
 

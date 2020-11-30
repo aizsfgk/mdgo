@@ -2,15 +2,19 @@ package poller
 
 import (
 	"fmt"
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
-
 	"syscall"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/event"
+	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 )
 
 const (
+	/*
+	   1. 水平触发: 只要接收缓冲区中有数据，就会通知一次
+	   2. 边缘触发: 接收缓冲区从空到非空，才会通知一次
+			-syscall.EPOLLET
+	 */
 	readEvent = syscall.EPOLLIN
 	writeEvent = syscall.EPOLLOUT
 	errorEvent = syscall.EPOLLERR // epoll 默认会注册这种事件

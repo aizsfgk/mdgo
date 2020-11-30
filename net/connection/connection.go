@@ -3,15 +3,16 @@ package connection
 import (
 	"bytes"
 	"fmt"
-	"github.com/aizsfgk/mdgo/base/atomic"
-	"github.com/aizsfgk/mdgo/net/event"
 	"net"
+	"os"
 	"strconv"
 	"syscall"
 	"time"
 
 	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/net/eventloop"
+	"github.com/aizsfgk/mdgo/base/atomic"
+	"github.com/aizsfgk/mdgo/net/event"
 )
 
 
@@ -95,6 +96,12 @@ func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
 func (conn *Connection) handleRead(fd int) error {
 	fmt.Println("handleRead: fd:", fd)
 
+	// 读取数据
+
+	// 返回0(EOF), 则关闭连接
+
+	// 返回-1， 表示有错误发生
+
 	return nil
 }
 
@@ -102,6 +109,7 @@ func (conn *Connection) handleRead(fd int) error {
 
 func (conn *Connection) handleWrite(fd int) error {
 	fmt.Println("handleWrite: fd:", fd)
+
 	return nil
 }
 

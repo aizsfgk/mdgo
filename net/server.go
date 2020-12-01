@@ -19,10 +19,18 @@ type Handler interface {
 	callback.Callback
 }
 
+type Codec interface {
+	Pack(b []byte)
+	Unpack(b []byte) interface{}
+}
+
+
+// 编解码和服务器走
 type Server struct {
 	started atomic.Bool
 	option  *Option
 	handler Handler
+	codec Codec
 
 	mainLoop      *eventloop.EventLoop
 	worksNum      int

@@ -10,7 +10,7 @@ import (
 
 type SocketCtx interface {
 	Close() error
-	HandleEvent(fd int, eve event.Event) error
+	HandleEvent(eve event.Event, nowUnix int64) error
 }
 
 type EventLoop struct {
@@ -20,6 +20,7 @@ type EventLoop struct {
 	looping atomic.Bool
 	quit atomic.Bool
 	eventHandling atomic.Bool
+	LoopId int
 }
 
 
@@ -57,11 +58,13 @@ func (el *EventLoop) Stop() error {
 	return el.Poll.Close()
 }
 
-func (el *EventLoop) debugPrintf(evs *[]*event.Ev) {
+func (el *EventLoop) debugPrintf(evs *[]event.Ev) {
 	fmt.Printf("\n==========================\n")
 	fmt.Printf(" revent-print: \n")
 	for _, ev := range *evs {
-		fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+		if ev.Fd > 0 {
+			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+		}
 	}
 	fmt.Printf("==========================\n")
 }
@@ -72,10 +75,10 @@ func (el *EventLoop) Loop() {
 
 	el.looping.Set(true)
 
-	activeConn := make([]*event.Ev, 0, poller.WaitEventsBegin)
+	activeConn := make([]event.Ev, poller.WaitEventsBegin)
 
 	for !el.quit.Get() {
-		el.Poll.Poll(10000, &activeConn)
+		nowUnix := el.Poll.Poll(10000, &activeConn)
 
 		if len(activeConn) > 0 {
 			el.debugPrintf(&activeConn)
@@ -83,7 +86,7 @@ func (el *EventLoop) Loop() {
 			el.eventHandling.Set(true)
 			for _, curEv := range activeConn {
 				if sc, ok := el.socketCtx[curEv.Fd]; ok {
-					err := sc.HandleEvent(curEv.Fd, curEv.Revent)
+					err := sc.HandleEvent(curEv.Revent, nowUnix)
 					if err != nil {
 						fmt.Println("handler activeConn: err: ", err)
 					}
@@ -91,7 +94,6 @@ func (el *EventLoop) Loop() {
 			}
 			el.eventHandling.Set(false)
 		}
-
 	}
 
 	fmt.Println("eventLoop Loop end...")

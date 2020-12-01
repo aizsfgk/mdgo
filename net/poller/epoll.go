@@ -3,6 +3,7 @@ package poller
 import (
 	"fmt"
 	"syscall"
+	"time"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/event"
@@ -100,13 +101,13 @@ func (p *Poller) EnableReadWrite(fd int) error {
 	return p.mod(fd, readEvent|writeEvent)
 }
 
-func (p *Poller) Poll(msec int, acp *[]*event.Ev) {
+func (p *Poller) Poll(msec int, acp *[]event.Ev) int64 {
 	events := make([]syscall.EpollEvent, WaitEventsBegin)
 
 	n, err := syscall.EpollWait(p.epFd, events, msec) // 事件就绪
 	if err != nil && err != syscall.EAGAIN {
 		fmt.Println("epollWait-err: ", err)
-		return
+		return time.Now().Unix()
 	}
 
 	var evp event.Ev
@@ -125,13 +126,13 @@ func (p *Poller) Poll(msec int, acp *[]*event.Ev) {
 		evp.Revent = rEvent
 		evp.Fd = int(events[i].Fd)
 
-		*acp = append(*acp, &evp)
+		(*acp)[i] = evp
 	}
 
 	if len(events) == n {
 		WaitEventsBegin = 2 * WaitEventsBegin
 	}
-	return
+	return time.Now().Unix()
 }
 
 

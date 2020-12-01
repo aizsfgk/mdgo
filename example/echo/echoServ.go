@@ -19,14 +19,14 @@ func (e *echoHandler)  OnConnection(conn *connection.Connection) {
 	fmt.Println("OnConnection")
 }
 
-func (e *echoHandler) OnMessage(conn *connection.Connection) {
-	fmt.Println("OnMessage")
+func (e *echoHandler) OnMessage(nowUnix int64) {
+	fmt.Println("OnMessage => nowUnix: ", nowUnix)
 }
 
-func (e *echoHandler) OnWriteComplete(conn *connection.Connection) {
+func (e *echoHandler) OnWriteComplete() {
 	fmt.Println("OnWriteComplete")
 }
-func (e *echoHandler) OnClose(conn *connection.Connection) {
+func (e *echoHandler) OnClose() {
 	fmt.Println("OnClose")
 }
 

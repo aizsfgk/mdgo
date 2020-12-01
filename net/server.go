@@ -2,6 +2,7 @@ package net
 
 import (
 	"fmt"
+	"github.com/aizsfgk/mdgo/net/callback"
 	"runtime"
 	"syscall"
 
@@ -15,9 +16,7 @@ import (
 type Handler interface {
 	OnEventLoopInit(conn *connection.Connection)
 	OnConnection(conn *connection.Connection)
-	OnMessage(conn *connection.Connection)
-	OnWriteComplete(conn *connection.Connection)
-	OnClose(conn *connection.Connection)
+	callback.Callback
 }
 
 type Server struct {
@@ -63,6 +62,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := eventloop.New()
+			loop.LoopId = i
 			if err != nil {
 				fmt.Println("wloops-err:", wloops)
 				for j := 0; j < i; j++ {
@@ -94,7 +94,8 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	// 新建连接
 	//
 	// Connection 是对 TCP连接的抽象
-	conn, err := connection.New(fd, loop, sa)
+	conn, err := connection.New(fd, loop, sa, serv.handler)
+
 	if err != nil {
 		fmt.Println("handleNewConnection:err: ", err)
 		return err

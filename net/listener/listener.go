@@ -57,10 +57,10 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 	}, nil
 }
 
-func (l *Listener) HandleEvent(fd int, eve event.Event) error {
+func (l *Listener) HandleEvent(eve event.Event, nowUnix int64) error {
 	fmt.Println("listener HandleEvent")
 	if eve & event.EventRead != 0 {
-		connFd, sa, err := syscall.Accept4(fd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
+		connFd, sa, err := syscall.Accept4(l.listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
 		if err != nil {
 			if err == syscall.EAGAIN { // EAGAIN : 表示资源临时不可用
 				fmt.Println("accept4-err:", err.Error())

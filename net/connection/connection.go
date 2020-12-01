@@ -1,10 +1,8 @@
 package connection
 
 import (
-	"bytes"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"syscall"
 	"time"
@@ -13,14 +11,19 @@ import (
 	"github.com/aizsfgk/mdgo/net/eventloop"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/event"
+	"github.com/aizsfgk/mdgo/net/buffer"
+	"github.com/aizsfgk/mdgo/net/callback"
 )
+
+
 
 
 type Connection struct {
 	connFd int
 	connected atomic.Bool
-	inBuf bytes.Buffer
-	outBuf bytes.Buffer
+	inBuf *buffer.FixBuffer
+	outBuf *buffer.FixBuffer
+	cb callback.Callback
 
 	peerAddr string
 	eventLoop *eventloop.EventLoop
@@ -28,17 +31,27 @@ type Connection struct {
 }
 
 
-func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr) (*Connection, error) {
+func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr, cb callback.Callback) (*Connection, error) {
 	conn := &Connection{
 		connFd:    fd,
-		inBuf: bytes.Buffer{},
-		outBuf: bytes.Buffer{},
+		inBuf: buffer.NewFixBuffer(),
+		outBuf: buffer.NewFixBuffer(),
 		peerAddr:  sockAddrToString(sa),
 		eventLoop: loop,
+		cb: cb,
 	}
 	conn.connected.Set(true)
 	return conn,nil
 }
+
+
+//func (conn *Connection) SetOnWriteComplete(msgCb callback.WriteCompleteCallback) {
+//	conn.cb.OnWriteComplete = msgCb
+//}
+//
+//func (conn *Connection) SetOnClose(msgCb callback.CloseCallback) {
+//	conn.cb.OnClose = msgCb
+//}
 
 
 func (conn *Connection) Fd() int {
@@ -52,16 +65,16 @@ func (conn *Connection) Close() error {
 	return conn.handleClose(conn.Fd())
 }
 
-func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
+func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 	fmt.Println("Connection HandleEvent")
-	fmt.Println("Connection-fd:", fd)
+	fmt.Println("Connection-fd:", conn.Fd())
 	fmt.Println("eve: ",eve)
 
 	conn.activeTime.Swap(time.Now().Unix())
 
 	var err error
 	if eve & event.EventErr != 0 {
-		err = conn.handleError(fd)
+		err = conn.handleError(conn.Fd())
 		if err != nil {
 			fmt.Println("HandleError-err: ", err)
 			return err
@@ -69,7 +82,7 @@ func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
 	}
 
 	if eve & event.EventRead != 0 {
-		err = conn.handleRead(fd)
+		err = conn.handleRead(nowUnix)
 		if err != nil {
 			fmt.Println("handleRead-err: ", err)
 			return err
@@ -77,7 +90,7 @@ func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
 	}
 
 	if eve & event.EventWrite != 0 {
-		err = conn.handleWrite(fd)
+		err = conn.handleWrite(conn.Fd())
 		if err != nil {
 			fmt.Println("handleWrite-err: ", err)
 			return err
@@ -93,8 +106,25 @@ func (conn *Connection) HandleEvent(fd int, eve event.Event) error {
  *   1. 读就绪，如果不处理，（水平触发下）会一直通知；
  *   因为此时：接收缓冲区中一直有数据，水平触发下，需要一直通知
  */
-func (conn *Connection) handleRead(fd int) error {
-	fmt.Println("handleRead: fd:", fd)
+func (conn *Connection) handleRead(nowUnix int64) error {
+
+	// 等待几秒返回
+	n, err := conn.inBuf.ReadFd(conn.Fd())
+	if err.Temporary() { // 非阻塞会返回EAGAIN: resource temporarily unavailable
+		return nil
+	}
+	fmt.Println("inbuf: ", conn.inBuf.RetrieveAllAsString())
+
+	if n > 0 {
+		// messageCallback回调使用
+		conn.cb.OnMessage(nowUnix)
+
+	} else if n == 0 {
+		conn.handleClose(conn.Fd())
+	} else {
+		conn.handleError(conn.Fd())
+	}
+
 
 	// 读取数据
 

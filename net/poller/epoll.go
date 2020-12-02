@@ -111,7 +111,12 @@ func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
 	n, err := syscall.EpollWait(p.epFd, events, msec) // 事件就绪
 	nowUnix := time.Now().Unix()
 	fmt.Println("就绪事件个数：", n)
-	if err != nil && err != syscall.EAGAIN {
+	if err != nil{
+		// EAGAIN : 非阻塞模式，EAGIN
+		// EINTR: 系统繁忙被打断
+		if err == syscall.EAGAIN || err == syscall.EINTR {
+			return nowUnix, 0
+		}
 		fmt.Println("epollWait-err: ", err)
 		return nowUnix, 0
 	}

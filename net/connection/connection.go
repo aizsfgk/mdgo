@@ -111,7 +111,7 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 		}
 
 		if conn.OutBuf.ReadableBytes() > 0 {
-			//return conn.eventLoop.EnableWrite(conn.Fd())
+			return conn.eventLoop.EnableWrite(conn.Fd())
 		}
 	}
 	return nil
@@ -200,7 +200,7 @@ func (conn *Connection) handleWrite(fd int) error {
 
 	n, err := syscall.Write(conn.Fd(), conn.OutBuf.PeekAll())
 	if err != nil {
-		if err == syscall.EAGAIN {
+		if err == syscall.EAGAIN { /// 之后，再次处理
 			return nil
 		}
 		return conn.handleClose()

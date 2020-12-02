@@ -101,13 +101,19 @@ func (p *Poller) EnableReadWrite(fd int) error {
 	return p.mod(fd, readEvent|writeEvent)
 }
 
-func (p *Poller) Poll(msec int, acp *[]event.Ev) int64 {
+/*
+	就绪事件如何暴露出来???这是一个值得思考的问题
+
+ */
+func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
 	events := make([]syscall.EpollEvent, WaitEventsBegin)
 
 	n, err := syscall.EpollWait(p.epFd, events, msec) // 事件就绪
+	nowUnix := time.Now().Unix()
+	fmt.Println("就绪事件个数：", n)
 	if err != nil && err != syscall.EAGAIN {
 		fmt.Println("epollWait-err: ", err)
-		return time.Now().Unix()
+		return nowUnix, 0
 	}
 
 	var evp event.Ev
@@ -132,7 +138,8 @@ func (p *Poller) Poll(msec int, acp *[]event.Ev) int64 {
 	if len(events) == n {
 		WaitEventsBegin = 2 * WaitEventsBegin
 	}
-	return time.Now().Unix()
+
+	return nowUnix, n
 }
 
 

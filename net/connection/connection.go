@@ -6,24 +6,28 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"os"
 
 	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/net/eventloop"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/event"
 	"github.com/aizsfgk/mdgo/net/buffer"
-	"github.com/aizsfgk/mdgo/net/callback"
 )
 
-
+type Callback interface {
+	OnMessage(*Connection, int64)
+	OnClose()
+	OnWriteComplete()
+}
 
 
 type Connection struct {
 	connFd int
 	connected atomic.Bool
-	inBuf *buffer.FixBuffer
-	outBuf *buffer.FixBuffer
-	cb callback.Callback
+	InBuf *buffer.FixBuffer
+	OutBuf *buffer.FixBuffer
+	cb Callback
 
 	peerAddr string
 	eventLoop *eventloop.EventLoop
@@ -31,11 +35,11 @@ type Connection struct {
 }
 
 
-func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr, cb callback.Callback) (*Connection, error) {
+func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr, cb Callback) (*Connection, error) {
 	conn := &Connection{
 		connFd:    fd,
-		inBuf: buffer.NewFixBuffer(),
-		outBuf: buffer.NewFixBuffer(),
+		InBuf: buffer.NewFixBuffer(),
+		OutBuf: buffer.NewFixBuffer(),
 		peerAddr:  sockAddrToString(sa),
 		eventLoop: loop,
 		cb: cb,
@@ -62,7 +66,55 @@ func (conn *Connection) Close() error {
 	if !conn.connected.Get() {
 		return mdgoErr.ErrConnectionClosed
 	}
-	return conn.handleClose(conn.Fd())
+	return conn.handleClose()
+}
+
+func (conn *Connection) SendString(out string) error {
+	return conn.SendByte([]byte(out))
+}
+
+func (conn *Connection) SendByte(out []byte) error {
+	if !conn.connected.Get() {
+		return mdgoErr.ErrConnectionClosed
+	}
+
+	_ = conn.SendInLoop(out)
+
+	return nil
+}
+
+func (conn *Connection) SendInLoop(out []byte) (rerr error) {
+	if conn.OutBuf.ReadableBytes() > 0 {
+		conn.OutBuf.Append(out)
+	} else {
+		n, err := syscall.Write(conn.Fd(), out)
+		if err != nil {
+			// EAGAIN 说明没有数据空间，可以写入
+			// n个字节追加到缓冲区
+
+			if err != syscall.EAGAIN { /// 此时 n == -1
+				rerr = conn.handleClose()
+				return
+			}
+
+			fmt.Println("SendInLoop-EAGAIN-err: ", err)
+		}
+
+		fmt.Println("SendInLoop: n: ", n)
+
+		if n < len(out) {
+			if n == 0 {
+				conn.OutBuf.Append(out)
+			} else {
+				conn.OutBuf.Append(out[n:])
+			}
+		}
+
+		if conn.OutBuf.ReadableBytes() > 0 {
+			//return conn.eventLoop.EnableWrite(conn.Fd())
+		}
+	}
+	return nil
 }
 
 func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
@@ -74,11 +126,8 @@ func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 
 	var err error
 	if eve & event.EventErr != 0 {
-		err = conn.handleError(conn.Fd())
-		if err != nil {
-			fmt.Println("HandleError-err: ", err)
-			return err
-		}
+		conn.handleError(conn.Fd())
+		// TODO close conn
 	}
 
 	if eve & event.EventRead != 0 {
@@ -109,18 +158,18 @@ func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 func (conn *Connection) handleRead(nowUnix int64) error {
 
 	// 等待几秒返回
-	n, err := conn.inBuf.ReadFd(conn.Fd())
+	n, err := conn.InBuf.ReadFd(conn.Fd())
 	if err.Temporary() { // 非阻塞会返回EAGAIN: resource temporarily unavailable
 		return nil
 	}
-	fmt.Println("inbuf: ", conn.inBuf.RetrieveAllAsString())
 
 	if n > 0 {
+		// cb 2
 		// messageCallback回调使用
-		conn.cb.OnMessage(nowUnix)
+		conn.cb.OnMessage(conn, nowUnix)
 
 	} else if n == 0 {
-		conn.handleClose(conn.Fd())
+		_ = conn.handleClose()
 	} else {
 		conn.handleError(conn.Fd())
 	}
@@ -136,26 +185,76 @@ func (conn *Connection) handleRead(nowUnix int64) error {
 }
 
 // 2. 处理写
-
+// ??? 何时激活读写
+//
 func (conn *Connection) handleWrite(fd int) error {
 	fmt.Println("handleWrite: fd:", fd)
+
+	// 1. 如果缓冲区中没有可读数据，则直接写入fd
+
+	// 2. 否则说明写入过，则追加到缓冲区后边
+
+	// redis 是使用链表把缓冲区拉起来
+	// muduo 采用了上边说的策略
+	// mdgo 如何处理呢???
+
+	n, err := syscall.Write(conn.Fd(), conn.OutBuf.PeekAll())
+	if err != nil {
+		if err == syscall.EAGAIN {
+			return nil
+		}
+		return conn.handleClose()
+	}
+
+	if n == conn.OutBuf.ReadableBytes() {
+		// cb4
+		conn.cb.OnWriteComplete()
+	}
+
+	conn.OutBuf.Retrieve(n)
 
 	return nil
 }
 
 // 3. 处理关闭
+//
+func (conn *Connection) handleClose() error {
 
-func (conn *Connection) handleClose(fd int) error {
-	fmt.Println("handleClose: fd:", fd)
+	if conn.connected.Get() {
+		conn.connected.Set(false)
 
-	return syscall.Close(fd)
+		conn.eventLoop.DeleteInLoop(conn.Fd())
+
+		// cb 3
+		conn.cb.OnClose()
+
+		/// 何时使用优雅关闭
+		if err := syscall.Close(conn.Fd()); err != nil {
+			fmt.Println("close fd err: ", err)
+			return err
+		}
+	}
+	return nil
 }
 
 // 4. 处理错误
 
-func (conn *Connection) handleError(fd int) error {
-	fmt.Println("handleError: fd:", fd)
-	return nil
+func (conn *Connection) handleError(fd int) {
+	nerr, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_ERROR)
+	if err != nil {
+		fmt.Println("TcpConnection::handleError => fd: ", fd, "; err: ", os.NewSyscallError("getsockopt", err))
+		return
+	}
+
+	osErr := syscall.Errno(nerr)
+	fmt.Println("TcpConnection::handleError => fd: ", fd, "; err: ", osErr.Error())
+	return
+}
+
+// 平滑关闭
+func (conn *Connection) ShutdownWrite() error {
+	conn.connected.Set(false)
+	return syscall.Shutdown(conn.Fd(), syscall.SHUT_WR)
 }
 
 

@@ -134,6 +134,11 @@ func (f *FixBuffer) RetrieveAllAsString() string {
 	return string(ret)
 }
 
+func (f *FixBuffer) RetrieveAllAsBytes() []byte {
+	ret := f.RetrieveAsBytes(f.ReadableBytes())
+	return ret
+}
+
 func (f *FixBuffer) RetrieveAsBytes(len int) (ret []byte) {
 	if len <= f.ReadableBytes() {
 		ret = f.Peek(len)
@@ -220,6 +225,13 @@ func (f *FixBuffer) ReadUint8() uint8 {
 }
 
 // ******************* peek ******************** //
+
+func (f *FixBuffer) PeekAll() (b []byte) {
+	if f.ReadableBytes() > 0 {
+		b = f.buf[f.ri: f.wi]
+	}
+	return
+}
 
 func (f *FixBuffer) Peek(len int) (b []byte) {
 	if len <= 0 {

@@ -37,6 +37,7 @@ func New() (el *EventLoop, err error) {
 
 func (el *EventLoop) AddSocketAndEnableRead(fd int, sc SocketCtx) error {
 
+
 	var err error
 	el.socketCtx[fd] = sc
 
@@ -62,9 +63,9 @@ func (el *EventLoop) debugPrintf(evs *[]event.Ev) {
 	fmt.Printf("\n==========================\n")
 	fmt.Printf(" revent-print: \n")
 	for _, ev := range *evs {
-		if ev.Fd > 0 {
-			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
-		}
+
+		fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+
 	}
 	fmt.Printf("==========================\n")
 }
@@ -75,12 +76,11 @@ func (el *EventLoop) Loop() {
 
 	el.looping.Set(true)
 
-	activeConn := make([]event.Ev, poller.WaitEventsBegin)
-
 	for !el.quit.Get() {
-		nowUnix := el.Poll.Poll(10000, &activeConn)
+		activeConn := make([]event.Ev, poller.WaitEventsBegin)
+		nowUnix, n := el.Poll.Poll(10000, &activeConn)
 
-		if len(activeConn) > 0 {
+		if n > 0 {
 			el.debugPrintf(&activeConn)
 
 			el.eventHandling.Set(true)
@@ -114,6 +114,7 @@ func (el *EventLoop) EnableReadWrite(fd int) error {
 }
 
 func (el *EventLoop) DeleteInLoop(fd int) {
+	// 剔除事件循环
 	if err := el.Poll.Del(fd); err != nil {
 		fmt.Println("[DeleteFdInLoop]", err)
 	}

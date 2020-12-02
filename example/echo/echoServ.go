@@ -19,8 +19,13 @@ func (e *echoHandler)  OnConnection(conn *connection.Connection) {
 	fmt.Println("OnConnection")
 }
 
-func (e *echoHandler) OnMessage(nowUnix int64) {
+func (e *echoHandler) OnMessage(conn *connection.Connection, nowUnix int64) {
 	fmt.Println("OnMessage => nowUnix: ", nowUnix)
+
+	bs := conn.InBuf.RetrieveAllAsBytes()
+	fmt.Println("receive: ", string(bs))
+
+	conn.SendByte(bs)
 }
 
 func (e *echoHandler) OnWriteComplete() {

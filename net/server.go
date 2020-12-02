@@ -2,13 +2,12 @@ package net
 
 import (
 	"fmt"
-	"github.com/aizsfgk/mdgo/net/callback"
 	"runtime"
 	"syscall"
 
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/connection"
+	mdgoErr "github.com/aizsfgk/mdgo/net/error"
 	"github.com/aizsfgk/mdgo/net/eventloop"
 	"github.com/aizsfgk/mdgo/net/listener"
 )
@@ -16,7 +15,7 @@ import (
 type Handler interface {
 	OnEventLoopInit(conn *connection.Connection)
 	OnConnection(conn *connection.Connection)
-	callback.Callback
+	connection.Callback
 }
 
 type Codec interface {
@@ -66,6 +65,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		serv.option.NumLoop = runtime.NumCPU()
 	}
 
+	fmt.Println("serv.option.NumLoop: ", serv.option.NumLoop)
 	if serv.option.NumLoop > 0 {
 		wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
@@ -109,8 +109,19 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 		return err
 	}
 
-	// 执行回调
+	// cb1 ： 执行回调
 	serv.handler.OnConnection(conn)
+
+
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 10)
+	if err != nil {
+		fmt.Println("set sndBuf err1: ", err)
+	}
+
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, 10)
+	if err != nil {
+		fmt.Println("set sndBuf err2: ", err)
+	}
 
 	return loop.AddSocketAndEnableRead(fd, conn)
 }

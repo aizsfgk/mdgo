@@ -91,7 +91,13 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 		if err != nil {
 			// EAGAIN 说明没有数据空间，可以写入
 			// n个字节追加到缓冲区
+			/*
+			普通做法：
+			当需要向socket写数据时，将该socket加入到epoll等待可写事件。接收到socket可写事件后，调用write()或send()发送数据，当数据全部写完后， 将socket描述符移出epoll列表，这种做法需要反复添加和删除。
 
+			改进做法:
+			向socket写数据时直接调用send()发送，当send()返回错误码EAGAIN，才将socket加入到epoll，等待可写事件后再发送数据，全部数据发送完毕，再移出epoll模型，改进的做法相当于认为socket在大部分时候是可写的，不能写了再让epoll帮忙监控。上面两种做法是对LT模式下write事件频繁通知的修复，本质上ET模式就可以直接搞定，并不需要用户层程序的补丁操作。
+			 */
 			if err != syscall.EAGAIN { /// 此时 n == -1
 				rerr = conn.handleClose()
 				return
@@ -207,7 +213,14 @@ func (conn *Connection) handleWrite(fd int) error {
 	}
 
 	if n == conn.OutBuf.ReadableBytes() {
+
+		// 已经写完了
+		// 则取消写事件
+		// 激活读事件
+		_ = conn.eventLoop.EnableRead(conn.Fd())
+
 		// cb4
+		// 这是缓冲区中，数据写完
 		conn.cb.OnWriteComplete()
 	}
 

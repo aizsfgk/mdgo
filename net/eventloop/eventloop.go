@@ -63,9 +63,9 @@ func (el *EventLoop) debugPrintf(evs *[]event.Ev) {
 	fmt.Printf("\n==========================\n")
 	fmt.Printf(" revent-print: \n")
 	for _, ev := range *evs {
-
-		fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
-
+		if ev.Fd > 0 {
+			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+		}
 	}
 	fmt.Printf("==========================\n")
 }
@@ -78,7 +78,7 @@ func (el *EventLoop) Loop() {
 
 	for !el.quit.Get() {
 		activeConn := make([]event.Ev, poller.WaitEventsBegin)
-		nowUnix, n := el.Poll.Poll(10000, &activeConn)
+		nowUnix, n := el.Poll.Poll(1000, &activeConn)
 
 		if n > 0 {
 			el.debugPrintf(&activeConn)

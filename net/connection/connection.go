@@ -117,7 +117,10 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 		}
 
 		if conn.OutBuf.ReadableBytes() > 0 {
-			return conn.eventLoop.EnableWrite(conn.Fd())
+
+			// 激活写
+			//
+			return conn.eventLoop.EnableReadWrite(conn.Fd())
 		}
 	}
 	return nil
@@ -175,6 +178,8 @@ func (conn *Connection) handleRead(nowUnix int64) error {
 		conn.cb.OnMessage(conn, nowUnix)
 
 	} else if n == 0 {
+
+		// 处理 RDHUP事件
 		_ = conn.handleClose()
 	} else {
 		conn.handleError(conn.Fd())
@@ -209,6 +214,7 @@ func (conn *Connection) handleWrite(fd int) error {
 		if err == syscall.EAGAIN { /// 之后，再次处理
 			return nil
 		}
+		// 处理HUP事件
 		return conn.handleClose()
 	}
 
@@ -236,7 +242,7 @@ func (conn *Connection) handleClose() error {
 	if conn.connected.Get() {
 		conn.connected.Set(false)
 
-		conn.eventLoop.DeleteInLoop(conn.Fd())
+		conn.eventLoop.DeleteInLoop(conn.Fd()) //
 
 		// cb 3
 		conn.cb.OnClose()
@@ -261,6 +267,12 @@ func (conn *Connection) handleError(fd int) {
 
 	osErr := syscall.Errno(nerr)
 	fmt.Println("TcpConnection::handleError => fd: ", fd, "; err: ", osErr.Error())
+
+	// 这里真的有错误发生了，应该处理错误了
+	// 直接退出程序???
+	// 还是关闭连接???
+	//
+	//
 	return
 }
 

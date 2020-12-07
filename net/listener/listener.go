@@ -59,6 +59,7 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 
 func (l *Listener) HandleEvent(eve event.Event, nowUnix int64) error {
 	fmt.Println("listener HandleEvent")
+	// 监听的套接字，只关注可读事件
 	if eve & event.EventRead != 0 {
 		connFd, sa, err := syscall.Accept4(l.listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
 		if err != nil {

@@ -17,10 +17,34 @@ const (
 	   1. 水平触发: 只要接收缓冲区中有数据，就会通知一次
 	   2. 边缘触发: 接收缓冲区从空到非空，才会通知一次
 			-syscall.EPOLLET
+
+	EPOLLIN : 可读
+	EPOLLOUT： 可写
+	EPOLLRDHUP : 对端关闭或者半关闭（写） since linux 2.6.17
+	EPOLLPRI : 带外数据可读
+
+	EPOLLERR： fd相关的错误事件事件发生（总是监听）
+	EPOLLHUP:  相关的FD上发生Hang Up事件[ shutdown(wr) shutdown(rd) close(conn) ]
+
+	// 当发生这些错误的时候，需要从epoll中删除这些Fd,并关闭连接
+
+	EPOLLET: 边缘触发
+	EPOLLONESHOT： 只通知一次 since 2.6.2
+
+	https://elixir.bootlin.com/linux/v4.19/source/net/ipv4/tcp.c#L524
+
+	if (sk->sk_shutdown == SHUTDOWN_MASK || state == TCP_CLOSE) # 意味着如果你关闭了连接，还监听该FD，则会返回EPOLLHUP
+			mask |= EPOLLHUP;
+	if (sk->sk_shutdown & RCV_SHUTDOWN)
+		mask |= EPOLLIN | EPOLLRDNORM | EPOLLRDHUP;
+
+	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))    # 错误发生的条件
+			mask |= EPOLLERR;
+
 	 */
-	readEvent = syscall.EPOLLIN
-	writeEvent = syscall.EPOLLOUT
-	errorEvent = syscall.EPOLLERR // epoll 默认会注册这种事件
+	readEvent  = syscall.EPOLLIN | syscall.EPOLLPRI | syscall.EPOLLRDHUP
+	writeEvent = syscall.EPOLLOUT | syscall.EPOLLHUP
+	errorEvent = syscall.EPOLLERR // 发生了真实的错误
 )
 
 
@@ -32,7 +56,7 @@ type Poller struct {
 
 // 创建
 func Create() (*Poller, error) {
-	epFd, err := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC)
+	epFd, err := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC) // 为何要使用这些标志
 	if err != nil {
 		fmt.Println("Create-err: ", err)
 		syscall.Close(epFd)

@@ -85,7 +85,7 @@ func (el *EventLoop) Loop() {
 		if n > 0 {
 			el.debugPrintf(&activeConn)
 
-			el.eventHandling.Set(true)
+			el.eventHandling.Set(true) // 开启事件处理
 			for _, curEv := range activeConn {
 				if sc, ok := el.socketCtx[curEv.Fd]; ok {
 					err := sc.HandleEvent(curEv.Revent, nowUnix)

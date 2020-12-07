@@ -152,6 +152,12 @@ func (serv *Server) Start() (err error) {
 }
 
 func (serv *Server) Stop() {
+
+	if err := serv.mainLoop.Stop(); err != nil {
+		fmt.Println("mainLoop Stop err: ", err)
+		return
+	}
+
 	for _, lp := range serv.worksLoop {
 		lp.Stop()
 	}

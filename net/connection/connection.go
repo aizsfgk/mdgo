@@ -62,6 +62,9 @@ func (conn *Connection) Fd() int {
 	return conn.connFd
 }
 
+/**
+ 需要队列化关闭吗???
+ */
 func (conn *Connection) Close() error {
 	if !conn.connected.Get() {
 		return mdgoErr.ErrConnectionClosed
@@ -83,6 +86,9 @@ func (conn *Connection) SendByte(out []byte) error {
 	return nil
 }
 
+/**
+	需要队列化发送吗？
+ */
 func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 	if conn.OutBuf.ReadableBytes() > 0 {
 		conn.OutBuf.Append(out)

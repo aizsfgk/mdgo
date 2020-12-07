@@ -15,7 +15,7 @@ type SocketCtx interface {
 
 type EventLoop struct {
 	Poll *poller.Poller
-	socketCtx map[int]SocketCtx
+	socketCtx map[int]SocketCtx // 连接和对应的处理程序
 
 	looping atomic.Bool
 	quit atomic.Bool
@@ -25,6 +25,7 @@ type EventLoop struct {
 
 
 func New() (el *EventLoop, err error) {
+	fmt.Println("create Poller")
 	p, err := poller.Create()
 	if err != nil {
 		return nil, err
@@ -72,13 +73,14 @@ func (el *EventLoop) debugPrintf(evs *[]event.Ev) {
 
 // 开启事件循环
 func (el *EventLoop) Loop() {
-	fmt.Println("eventLoop Loop begin ...")
+	fmt.Println("eventLoop Loop begin; idx： ", el.LoopId)
 
 	el.looping.Set(true)
 
 	for !el.quit.Get() {
 		activeConn := make([]event.Ev, poller.WaitEventsBegin)
 		nowUnix, n := el.Poll.Poll(1000, &activeConn)
+		fmt.Println("idx: ", i, " 返回")
 
 		if n > 0 {
 			el.debugPrintf(&activeConn)

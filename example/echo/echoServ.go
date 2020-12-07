@@ -39,12 +39,14 @@ func main()  {
 
 
 	var eh = &echoHandler{}
-	serv, err := net.NewServer(eh, net.ReusePort(true), net.KeepAlive(10 * time.Minute))
+	serv, err := net.NewServer(eh, net.ReusePort(true), net.KeepAlive(10 * time.Minute), net.NumLoop(2))
 	if err != nil{
 		fmt.Println("server-err: ", err)
 		return
 	}
 
-	serv.Start()
+	if err := serv.Start(); err != nil {
+		fmt.Println("err: ", err)
+	}
 	
 }

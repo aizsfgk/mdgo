@@ -212,6 +212,7 @@ func (conn *Connection) handleWrite(fd int) error {
 	n, err := syscall.Write(conn.Fd(), conn.OutBuf.PeekAll())
 	if err != nil {
 		if err == syscall.EAGAIN { /// 之后，再次处理
+			fmt.Println("happen EAGAIN")
 			return nil
 		}
 		// 处理HUP事件

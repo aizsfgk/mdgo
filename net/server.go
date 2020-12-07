@@ -3,6 +3,7 @@ package net
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
@@ -12,19 +13,20 @@ import (
 	"github.com/aizsfgk/mdgo/net/listener"
 )
 
+// 处理句柄
 type Handler interface {
 	OnEventLoopInit(conn *connection.Connection)
 	OnConnection(conn *connection.Connection)
 	connection.Callback
 }
 
+// 编解码器
 type Codec interface {
 	Pack(b []byte)
 	Unpack(b []byte) interface{}
 }
 
-
-// 编解码和服务器走
+// 服务器
 type Server struct {
 	started atomic.Bool
 	option  *Option
@@ -32,9 +34,11 @@ type Server struct {
 	codec Codec
 
 	mainLoop      *eventloop.EventLoop
-	worksNum      int
+
 	worksLoop     []*eventloop.EventLoop
 	nextLoopIndex int
+
+	wg sync.WaitGroup
 }
 
 func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err error) {
@@ -52,6 +56,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		_ = serv.mainLoop.Stop
 		return nil, err
 	}
+	serv.mainLoop.LoopId = 99
 
 	l, err := listener.New(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
 	if err != nil {
@@ -65,9 +70,11 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		serv.option.NumLoop = runtime.NumCPU()
 	}
 
-	fmt.Println("serv.option.NumLoop: ", serv.option.NumLoop)
+
 	if serv.option.NumLoop > 0 {
+
 		wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
+		fmt.Println("sss-serv.option.NumLoop: ", serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := eventloop.New()
 			loop.LoopId = i
@@ -80,6 +87,8 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 			}
 			wloops[i] = loop
 		}
+
+		fmt.Println("wloops:len:", wloops)
 		serv.worksLoop = wloops
 	}
 
@@ -87,7 +96,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 }
 
 func (serv *Server) nextLoop() *eventloop.EventLoop {
-	if serv.worksNum == 0 {
+	if serv.option.NumLoop == 0 {
 		return serv.mainLoop
 	}
 	loop := serv.worksLoop[serv.nextLoopIndex]
@@ -98,6 +107,8 @@ func (serv *Server) nextLoop() *eventloop.EventLoop {
 func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	fmt.Println("handleNewConnection start")
 	loop := serv.nextLoop()
+
+	fmt.Println("loop: ", loop)
 
 	// 新建连接
 	//
@@ -113,27 +124,36 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	serv.handler.OnConnection(conn)
 
 
-	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 10)
-	if err != nil {
-		fmt.Println("set sndBuf err1: ", err)
-	}
-
-	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, 10)
-	if err != nil {
-		fmt.Println("set sndBuf err2: ", err)
-	}
-
 	return loop.AddSocketAndEnableRead(fd, conn)
 }
 
 func (serv *Server) Start() (err error) {
 	fmt.Println("server start")
 
-	serv.mainLoop.Loop()
+	// TODO 抽象化处理wg
+	serv.option.NumLoop)
+	for i:=0; i<serv.option.NumLoop; i++ {
+		serv.wg.Add(1)
+		go func(idx int){
+			defer serv.wg.Done()
+			serv.worksLoop[idx].Loop()
+		}(i)
+	}
 
+	serv.wg.Add(1)
+	go func() {
+		defer serv.wg.Done()
+		serv.mainLoop.Loop()
+	}()
+
+	serv.wg.Wait()
+	fmt.Println("server stop")
 	return
 }
 
 func (serv *Server) Stop() {
+	for _, lp := range serv.worksLoop {
+		lp.Stop()
+	}
 	return
 }

@@ -48,6 +48,19 @@ func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handle
 		return nil, err
 	}
 
+	/*
+	没有生效
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 10)
+	if err != nil {
+		fmt.Println("set sndBuf err1: ", err)
+	}
+
+	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, 10)
+	if err != nil {
+		fmt.Println("set sndBuf err2: ", err)
+	}
+	 */
+
 	return &Listener{
 		file: file,
 		listenFd: fd,

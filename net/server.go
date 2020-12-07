@@ -3,6 +3,7 @@ package net
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -56,7 +57,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		_ = serv.mainLoop.Stop
 		return nil, err
 	}
-	serv.mainLoop.LoopId = 99
+	serv.mainLoop.LoopId = "main"
 
 	l, err := listener.New(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
 	if err != nil {
@@ -77,7 +78,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		fmt.Println("sss-serv.option.NumLoop: ", serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := eventloop.New()
-			loop.LoopId = i
+			loop.LoopId = "sub-idx-"+strconv.Itoa(i)
 			if err != nil {
 				fmt.Println("wloops-err:", wloops)
 				for j := 0; j < i; j++ {

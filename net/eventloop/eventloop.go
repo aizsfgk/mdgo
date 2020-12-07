@@ -20,7 +20,7 @@ type EventLoop struct {
 	looping atomic.Bool
 	quit atomic.Bool
 	eventHandling atomic.Bool
-	LoopId int
+	LoopId string
 }
 
 
@@ -80,7 +80,7 @@ func (el *EventLoop) Loop() {
 	for !el.quit.Get() {
 		activeConn := make([]event.Ev, poller.WaitEventsBegin)
 		nowUnix, n := el.Poll.Poll(1000, &activeConn)
-		fmt.Println("idx: ", i, " 返回")
+		fmt.Println("idx: ", el.LoopId, " 返回")
 
 		if n > 0 {
 			el.debugPrintf(&activeConn)

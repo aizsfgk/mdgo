@@ -49,9 +49,9 @@ const (
 
 
 type Poller struct {
-	epFd int            // epFd
-	eventFd int         // wakeup用, FIXME
+	epFd int
 	running atomic.Bool
+	events []syscall.EpollEvent
 }
 
 // 创建
@@ -64,7 +64,7 @@ func Create() (*Poller, error) {
 	}
 	return &Poller{
 		epFd:    epFd,
-		eventFd: 0,
+		events:  make([]syscall.EpollEvent, WaitEventsBegin),
 	},nil
 }
 
@@ -132,9 +132,8 @@ func (p *Poller) EnableReadWrite(fd int) error {
 
  */
 func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
-	events := make([]syscall.EpollEvent, WaitEventsBegin)
 
-	n, err := syscall.EpollWait(p.epFd, events, msec) // 事件就绪
+	n, err := syscall.EpollWait(p.epFd, p.events, msec) // 事件就绪
 	nowUnix := time.Now().Unix()
 	fmt.Println("就绪事件个数：", n)
 	if err != nil{
@@ -150,24 +149,24 @@ func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
 	var evp event.Ev
 	for i:=0; i<n; i++ {
 		var rEvent event.Event
-		if events[i].Events & errorEvent != 0 {
+		if p.events[i].Events & errorEvent != 0 {
 			rEvent |= event.EventErr
 		}
-		if events[i].Events & readEvent != 0 {
+		if p.events[i].Events & readEvent != 0 {
 			rEvent |= event.EventRead
 		}
-		if events[i].Events & writeEvent != 0 {
+		if p.events[i].Events & writeEvent != 0 {
 			rEvent |= event.EventWrite
 		}
 
 		evp.Revent = rEvent
-		evp.Fd = int(events[i].Fd)
+		evp.Fd = int(p.events[i].Fd)
 
 		(*acp)[i] = evp
 	}
 
-	if len(events) == n {
-		WaitEventsBegin = 2 * WaitEventsBegin
+	if len(p.events) == n {
+		p.events = make([]syscall.EpollEvent, 2 * WaitEventsBegin)
 	}
 
 	return nowUnix, n

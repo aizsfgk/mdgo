@@ -131,7 +131,6 @@ func (serv *Server) Start() (err error) {
 	fmt.Println("server start")
 
 	// TODO 抽象化处理wg
-	serv.option.NumLoop)
 	for i:=0; i<serv.option.NumLoop; i++ {
 		serv.wg.Add(1)
 		go func(idx int){

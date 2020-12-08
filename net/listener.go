@@ -1,14 +1,13 @@
-package listener
+package net
 
 import (
 	"fmt"
-	"github.com/aizsfgk/mdgo/net/event"
 	"net"
 	"os"
 	"syscall"
 
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
-	"github.com/aizsfgk/mdgo/net/eventloop"
+	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
+	"github.com/aizsfgk/mdgo/net/event"
 )
 
 type HandlerConnFunc func(fd int, sa syscall.Sockaddr) error
@@ -18,10 +17,10 @@ type Listener struct {
 	listenFd int
 	handleC HandlerConnFunc
 	listener net.Listener
-	loop *eventloop.EventLoop
+	loop *EventLoop
 }
 
-func New(network, addr string, reusePort bool, loop *eventloop.EventLoop, handleConn HandlerConnFunc) (*Listener, error) {
+func NewListener(network, addr string, reusePort bool, loop *EventLoop, handleConn HandlerConnFunc) (*Listener, error) {
 	var (
 		listener net.Listener
 		err error

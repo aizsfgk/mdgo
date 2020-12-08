@@ -8,17 +8,14 @@ import (
 	"syscall"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
-	"github.com/aizsfgk/mdgo/net/connection"
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
-	"github.com/aizsfgk/mdgo/net/eventloop"
-	"github.com/aizsfgk/mdgo/net/listener"
+	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
 )
 
 // 处理句柄
 type Handler interface {
-	OnEventLoopInit(conn *connection.Connection)
-	OnConnection(conn *connection.Connection)
-	connection.Callback
+	OnEventLoopInit(conn *Connection)
+	OnConnection(conn *Connection)
+	Callback
 }
 
 // 编解码器
@@ -34,9 +31,9 @@ type Server struct {
 	handler Handler
 	codec Codec
 
-	mainLoop      *eventloop.EventLoop
+	mainLoop      *EventLoop
 
-	worksLoop     []*eventloop.EventLoop
+	worksLoop     []*EventLoop
 	nextLoopIndex int
 
 	wg sync.WaitGroup
@@ -52,14 +49,14 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 
 	serv.handler = handler
 	serv.option = option
-	serv.mainLoop, err = eventloop.New()
+	serv.mainLoop, err = NewEventLoop()
 	if err != nil {
 		_ = serv.mainLoop.Stop
 		return nil, err
 	}
 	serv.mainLoop.LoopId = "main"
 
-	l, err := listener.New(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
+	l, err := NewListener(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +71,10 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 
 	if serv.option.NumLoop > 0 {
 
-		wloops := make([]*eventloop.EventLoop, serv.option.NumLoop)
+		wloops := make([]*EventLoop, serv.option.NumLoop)
 		fmt.Println("sss-serv.option.NumLoop: ", serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
-			loop, err := eventloop.New()
+			loop, err := NewEventLoop()
 			loop.LoopId = "sub-idx-"+strconv.Itoa(i)
 			if err != nil {
 				fmt.Println("wloops-err:", wloops)
@@ -96,7 +93,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 	return
 }
 
-func (serv *Server) nextLoop() *eventloop.EventLoop {
+func (serv *Server) nextLoop() *EventLoop {
 	if serv.option.NumLoop == 0 {
 		return serv.mainLoop
 	}
@@ -114,7 +111,7 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	// 新建连接
 	//
 	// Connection 是对 TCP连接的抽象
-	conn, err := connection.New(fd, loop, sa, serv.handler)
+	conn, err := NewConnection(fd, loop, sa, serv.handler)
 
 	if err != nil {
 		fmt.Println("handleNewConnection:err: ", err)

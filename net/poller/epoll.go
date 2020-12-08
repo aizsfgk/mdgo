@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aizsfgk/mdgo/base/atomic"
+	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
 	"github.com/aizsfgk/mdgo/net/event"
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
+	"github.com/aizsfgk/mdgo/base/atomic"
 )
 
 const (
@@ -49,8 +49,8 @@ const (
 
 
 type Poller struct {
-	epFd int
 	running atomic.Bool
+	epFd int
 	events []syscall.EpollEvent
 }
 
@@ -131,7 +131,7 @@ func (p *Poller) EnableReadWrite(fd int) error {
 	就绪事件如何暴露出来???这是一个值得思考的问题
 
  */
-func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
+func (p *Poller) Poll(msec int, acp *[]event.EventHolder) (int64, int) {
 
 	n, err := syscall.EpollWait(p.epFd, p.events, msec) // 事件就绪
 	nowUnix := time.Now().Unix()
@@ -146,23 +146,22 @@ func (p *Poller) Poll(msec int, acp *[]event.Ev) (int64, int) {
 		return nowUnix, 0
 	}
 
-	var evp event.Ev
+	var evHolder event.EventHolder
 	for i:=0; i<n; i++ {
-		var rEvent event.Event
+		retEvent := event.EventNone
 		if p.events[i].Events & errorEvent != 0 {
-			rEvent |= event.EventErr
+			retEvent |= event.EventError
 		}
 		if p.events[i].Events & readEvent != 0 {
-			rEvent |= event.EventRead
+			retEvent |= event.EventRead
 		}
 		if p.events[i].Events & writeEvent != 0 {
-			rEvent |= event.EventWrite
+			retEvent |= event.EventWrite
 		}
+		evHolder.Revent = retEvent
+		evHolder.Fd = int(p.events[i].Fd)
 
-		evp.Revent = rEvent
-		evp.Fd = int(p.events[i].Fd)
-
-		(*acp)[i] = evp
+		(*acp)[i] = evHolder
 	}
 
 	if len(p.events) == n {

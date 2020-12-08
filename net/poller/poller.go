@@ -1,4 +1,5 @@
 package poller
 
-var WaitEventsBegin = 16
-
+var (
+	WaitEventsBegin = 4
+)

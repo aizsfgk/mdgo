@@ -1,4 +1,4 @@
-package connection
+package net
 
 import (
 	"fmt"
@@ -8,11 +8,10 @@ import (
 	"time"
 	"os"
 
-	mdgoErr "github.com/aizsfgk/mdgo/net/error"
-	"github.com/aizsfgk/mdgo/net/eventloop"
+	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
 	"github.com/aizsfgk/mdgo/base/atomic"
-	"github.com/aizsfgk/mdgo/net/event"
 	"github.com/aizsfgk/mdgo/net/buffer"
+	"github.com/aizsfgk/mdgo/net/event"
 )
 
 type Callback interface {
@@ -30,12 +29,12 @@ type Connection struct {
 	cb Callback
 
 	peerAddr string
-	eventLoop *eventloop.EventLoop
+	eventLoop *EventLoop
 	activeTime  atomic.Int64
 }
 
 
-func New(fd int, loop *eventloop.EventLoop, sa syscall.Sockaddr, cb Callback) (*Connection, error) {
+func NewConnection(fd int, loop *EventLoop, sa syscall.Sockaddr, cb Callback) (*Connection, error) {
 	conn := &Connection{
 		connFd:    fd,
 		InBuf: buffer.NewFixBuffer(),
@@ -140,7 +139,7 @@ func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 	conn.activeTime.Swap(time.Now().Unix())
 
 	var err error
-	if eve & event.EventErr != 0 {
+	if eve & event.EventError != 0 {
 		conn.handleError(conn.Fd())
 		// TODO close conn
 	}

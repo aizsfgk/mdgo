@@ -1,11 +1,11 @@
-package eventloop
+package net
 
 import (
 	"fmt"
 
-	"github.com/aizsfgk/mdgo/net/event"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/poller"
+	"github.com/aizsfgk/mdgo/net/event"
 )
 
 type SocketCtx interface {
@@ -13,18 +13,19 @@ type SocketCtx interface {
 	HandleEvent(eve event.Event, nowUnix int64) error
 }
 
+// 事件循环
 type EventLoop struct {
 	Poll *poller.Poller
+	LoopId string
 	socketCtx map[int]SocketCtx // 连接和对应的处理程序
 
 	looping atomic.Bool
 	quit atomic.Bool
 	eventHandling atomic.Bool
-	LoopId string
+
 }
 
-
-func New() (el *EventLoop, err error) {
+func NewEventLoop() (el *EventLoop, err error) {
 	fmt.Println("create Poller")
 	p, err := poller.Create()
 	if err != nil {
@@ -60,12 +61,12 @@ func (el *EventLoop) Stop() error {
 	return el.Poll.Close()
 }
 
-func (el *EventLoop) debugPrintf(evs *[]event.Ev) {
+func (el *EventLoop) debugPrintf(evs *[]event.EventHolder) {
 	fmt.Printf("\n==========================\n")
 	fmt.Printf(" revent-print: \n")
 	for _, ev := range *evs {
 		if ev.Fd > 0 {
-			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.RString())
+			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.Event2String())
 		}
 	}
 	fmt.Printf("==========================\n")
@@ -78,7 +79,7 @@ func (el *EventLoop) Loop() {
 	el.looping.Set(true)
 
 	for !el.quit.Get() {
-		activeConn := make([]event.Ev, poller.WaitEventsBegin)
+		activeConn := make([]event.EventHolder, poller.WaitEventsBegin)
 		nowUnix, n := el.Poll.Poll(1000, &activeConn)
 		fmt.Println("idx: ", el.LoopId, " 返回")
 

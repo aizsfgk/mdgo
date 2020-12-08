@@ -5,21 +5,20 @@ import (
 	"time"
 
 	"github.com/aizsfgk/mdgo/net"
-	"github.com/aizsfgk/mdgo/net/connection"
 )
 
 type echoHandler struct {
 }
 
-func (e *echoHandler) OnEventLoopInit(conn *connection.Connection) {
+func (e *echoHandler) OnEventLoopInit(conn *net.Connection) {
 	fmt.Println("OnEventLoopInit")
 }
 
-func (e *echoHandler)  OnConnection(conn *connection.Connection) {
+func (e *echoHandler)  OnConnection(conn *net.Connection) {
 	fmt.Println("OnConnection")
 }
 
-func (e *echoHandler) OnMessage(conn *connection.Connection, nowUnix int64) {
+func (e *echoHandler) OnMessage(conn *net.Connection, nowUnix int64) {
 	fmt.Println("OnMessage => nowUnix: ", nowUnix)
 
 	bs := conn.InBuf.RetrieveAllAsBytes()

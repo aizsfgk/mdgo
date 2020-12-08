@@ -26,19 +26,17 @@ type Codec interface {
 
 // 服务器
 type Server struct {
-	started atomic.Bool
-	option  *Option
-	handler Handler
-	codec Codec
-
-	mainLoop      *EventLoop
-
-	worksLoop     []*EventLoop
-	nextLoopIndex int
-
-	wg sync.WaitGroup
+	started       atomic.Bool    // 标明服务器是否启动
+	option        *Option        // 配置选项
+	handler       Handler        // 回调句柄
+	codec         Codec          // 编解码器 ??? 是否可以放到 EventLoop 减少锁开销
+	mainLoop      *EventLoop     // mainReactor
+	workLoops     []*EventLoop   // subReactor
+	nextLoopIndex int            // workLoop索引
+	wg            sync.WaitGroup // 同步
 }
 
+// 新建服务器
 func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err error) {
 	if handler == nil {
 		err = mdgoErr.HandlerIsNil
@@ -68,14 +66,13 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		serv.option.NumLoop = runtime.NumCPU()
 	}
 
-
 	if serv.option.NumLoop > 0 {
 
 		wloops := make([]*EventLoop, serv.option.NumLoop)
 		fmt.Println("sss-serv.option.NumLoop: ", serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := NewEventLoop()
-			loop.LoopId = "sub-idx-"+strconv.Itoa(i)
+			loop.LoopId = "sub-idx-" + strconv.Itoa(i)
 			if err != nil {
 				fmt.Println("wloops-err:", wloops)
 				for j := 0; j < i; j++ {
@@ -87,12 +84,53 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		}
 
 		fmt.Println("wloops:len:", wloops)
-		serv.worksLoop = wloops
+		serv.workLoops = wloops
 	}
 
 	return
 }
 
+// 启动服务器
+func (serv *Server) Start() (err error) {
+	fmt.Println("server start")
+
+	// TODO 抽象化处理wg
+	for i := 0; i < serv.option.NumLoop; i++ {
+		serv.wg.Add(1)
+		go func(idx int) {
+			defer serv.wg.Done()
+			serv.worksLoop[idx].Loop()
+		}(i)
+	}
+
+	serv.wg.Add(1)
+	go func() {
+		defer serv.wg.Done()
+		serv.mainLoop.Loop()
+	}()
+
+	serv.wg.Wait()
+	fmt.Println("server stop")
+	return
+}
+
+// 停止服务器
+func (serv *Server) Stop() {
+
+	if err := serv.mainLoop.Stop(); err != nil {
+		fmt.Println("mainLoop Stop err: ", err)
+		return
+	}
+
+	for _, lp := range serv.worksLoop {
+		lp.Stop()
+	}
+	return
+}
+
+// ******************** private method ******************** //
+
+// 获取NextLoop
 func (serv *Server) nextLoop() *EventLoop {
 	if serv.option.NumLoop == 0 {
 		return serv.mainLoop
@@ -102,6 +140,7 @@ func (serv *Server) nextLoop() *EventLoop {
 	return loop
 }
 
+// 新到连接处理
 func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	fmt.Println("handleNewConnection start")
 	loop := serv.nextLoop()
@@ -121,42 +160,5 @@ func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
 	// cb1 ： 执行回调
 	serv.handler.OnConnection(conn)
 
-
 	return loop.AddSocketAndEnableRead(fd, conn)
-}
-
-func (serv *Server) Start() (err error) {
-	fmt.Println("server start")
-
-	// TODO 抽象化处理wg
-	for i:=0; i<serv.option.NumLoop; i++ {
-		serv.wg.Add(1)
-		go func(idx int){
-			defer serv.wg.Done()
-			serv.worksLoop[idx].Loop()
-		}(i)
-	}
-
-	serv.wg.Add(1)
-	go func() {
-		defer serv.wg.Done()
-		serv.mainLoop.Loop()
-	}()
-
-	serv.wg.Wait()
-	fmt.Println("server stop")
-	return
-}
-
-func (serv *Server) Stop() {
-
-	if err := serv.mainLoop.Stop(); err != nil {
-		fmt.Println("mainLoop Stop err: ", err)
-		return
-	}
-
-	for _, lp := range serv.worksLoop {
-		lp.Stop()
-	}
-	return
 }

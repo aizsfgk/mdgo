@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
-	"github.com/aizsfgk/mdgo/net/poller"
 	"github.com/aizsfgk/mdgo/net/event"
+	"github.com/aizsfgk/mdgo/net/poller"
 )
 
 type SocketCtx interface {
@@ -15,14 +15,13 @@ type SocketCtx interface {
 
 // 事件循环
 type EventLoop struct {
-	Poll *poller.Poller
-	LoopId string
+	Poll      *poller.Poller
+	LoopId    string
 	socketCtx map[int]SocketCtx // 连接和对应的处理程序
 
-	looping atomic.Bool
-	quit atomic.Bool
+	looping       atomic.Bool
+	quit          atomic.Bool
 	eventHandling atomic.Bool
-
 }
 
 func NewEventLoop() (el *EventLoop, err error) {
@@ -32,13 +31,12 @@ func NewEventLoop() (el *EventLoop, err error) {
 		return nil, err
 	}
 	return &EventLoop{
-		Poll:    p,
+		Poll:      p,
 		socketCtx: make(map[int]SocketCtx, 1024),
 	}, nil
 }
 
 func (el *EventLoop) AddSocketAndEnableRead(fd int, sc SocketCtx) error {
-
 
 	var err error
 	el.socketCtx[fd] = sc

@@ -34,6 +34,22 @@ type Server struct {
 在`mdgo`中，`listener`和`connection`是平级的关系。
 
 1. listener : 代表监听套接字
-2. connection : 代表已连接套接字，代表对TCP连接的抽象
+2. connection : 代表已连接套接字，是对TCP连接的抽象
+
+~~~go
+type Listener struct {
+	listenFd      int             // 监听套接字
+	file          *os.File        // dupFd
+	handleNewConn HandlerConnFunc // new acceptFd coming to handle
+	listener      net.Listener    // net.Listener
+	loop          *EventLoop      // pointer main eventloop
+}
+~~~
+
+`listener`是监听套接字的处理模块，对于监听套接字，事件循环只处理`可读事件`,当监听套接字可读，即表示可以使用`accept`来获取已连接套接字，也表示`TCP三次握手完成`。之后将`acceptFd`嵌入`Connection`。
+
+~~~go
+
+~~~
 
 

@@ -13,76 +13,63 @@ import (
 type HandlerConnFunc func(fd int, sa syscall.Sockaddr) error
 
 type Listener struct {
-	listenFd int
-	file *os.File
-	handleC HandlerConnFunc
-	listener net.Listener
-	loop *EventLoop
+	listenFd      int             // 监听套接字
+	file          *os.File        // dupFd
+	handleNewConn HandlerConnFunc // new acceptFd coming to handle
+	listener      net.Listener    // net.Listener
+	loop          *EventLoop      // pointer main eventloop
 }
 
 func NewListener(network, addr string, reusePort bool, loop *EventLoop, handleConn HandlerConnFunc) (*Listener, error) {
 	var (
-		listener net.Listener
-		err error
+		listener    net.Listener
+		tcpListener *net.TCPListener
+		err         error
+		ok          bool
 	)
-	fmt.Println("network:", network)
-	fmt.Println("addr:", addr)
+
 	listener, err = net.Listen(network, addr)
 	if err != nil {
 		return nil, err
 	}
-	l, ok := listener.(*net.TCPListener)
+	tcpListener, ok = listener.(*net.TCPListener)
 	if !ok {
 		return nil, mdgoErr.ListenerIsNotTcp
 	}
 
-	file, err := l.File()  /// 这里会发生FD dup; 文件描述符+1 TODO
+	file, err := tcpListener.File() // File() 会发生 dupFd(), 由于是listenerFd,所以一个服务只会多一个
 	if err != nil {
 		return nil, err
 	}
 
 	fd := int(file.Fd())
-	fmt.Println("New - fd: ", fd)
-	if err = syscall.SetNonblock(fd, true); err != nil { // 设置了非阻塞
+	fmt.Println("*** new listenerFd: ", fd, "***")
+	if err = syscall.SetNonblock(fd, true); err != nil {
 		return nil, err
 	}
 
-	/*
-	没有生效
-	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 10)
-	if err != nil {
-		fmt.Println("set sndBuf err1: ", err)
-	}
-
-	err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, 10)
-	if err != nil {
-		fmt.Println("set sndBuf err2: ", err)
-	}
-	 */
-
 	return &Listener{
-		file: file,
-		listenFd: fd,
-		handleC: handleConn,
-		listener: listener,
-		loop: loop,
+		file:          file,
+		listenFd:      fd,
+		handleNewConn: handleConn,
+		listener:      listener,
+		loop:          loop,
 	}, nil
 }
 
 func (l *Listener) HandleEvent(eve event.Event, nowUnix int64) error {
-	fmt.Println("listener HandleEvent")
-	// 监听的套接字，只关注可读事件
-	if eve & event.EventRead != 0 {
+	// listenerFd only handle EventRead event
+	if eve&event.EventRead != 0 {
 		connFd, sa, err := syscall.Accept4(l.listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
 		if err != nil {
-			if err == syscall.EAGAIN { // EAGAIN : 表示资源临时不可用
-				fmt.Println("accept4-err:", err.Error())
+			if err == syscall.EAGAIN { // due to listenFd is nonblock, so accept can return EAGAIN
 				return nil
 			}
 			return err
 		}
-		fmt.Println("connFd: ", connFd)
-		return l.handleC(connFd, sa)
+		fmt.Println("*** new connFd: ", connFd, "***")
+		// start handle new connection
+		return l.handleNewConn(connFd, sa)
 	}
 	return nil
 }
@@ -93,6 +80,5 @@ func (l *Listener) Fd() int {
 
 func (l *Listener) Close() error {
 	l.loop.DeleteInLoop(l.listenFd)
-	return nil
+	return syscall.Close(l.listenFd)
 }
-

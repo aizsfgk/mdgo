@@ -62,6 +62,7 @@ func Create() (*Poller, error) {
 		syscall.Close(epFd)
 		return nil, err
 	}
+	fmt.Println("*** new epollFd: ", epFd, "***")
 	return &Poller{
 		epFd:    epFd,
 		events:  make([]syscall.EpollEvent, WaitEventsBegin),

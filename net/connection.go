@@ -3,14 +3,14 @@ package net
 import (
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"syscall"
 	"time"
-	"os"
 
-	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
 	"github.com/aizsfgk/mdgo/base/atomic"
 	"github.com/aizsfgk/mdgo/net/buffer"
+	mdgoErr "github.com/aizsfgk/mdgo/net/errors"
 	"github.com/aizsfgk/mdgo/net/event"
 )
 
@@ -20,33 +20,30 @@ type Callback interface {
 	OnWriteComplete()
 }
 
-
 type Connection struct {
-	connFd int
-	connected atomic.Bool
-	InBuf *buffer.FixBuffer
-	OutBuf *buffer.FixBuffer
-	cb Callback
+	connFd    int               // acceptFd
+	connected atomic.Bool       // state[connected or not]
+	InBuf     *buffer.FixBuffer // input buffer
+	OutBuf    *buffer.FixBuffer // output buffer
 
-	peerAddr string
-	eventLoop *EventLoop
-	activeTime  atomic.Int64
+	cb         Callback     // cb
+	peerAddr   string       // remote addr
+	eventLoop  *EventLoop   // work sub eventloop
+	activeTime atomic.Int64 // last active time
 }
-
 
 func NewConnection(fd int, loop *EventLoop, sa syscall.Sockaddr, cb Callback) (*Connection, error) {
 	conn := &Connection{
 		connFd:    fd,
-		InBuf: buffer.NewFixBuffer(),
-		OutBuf: buffer.NewFixBuffer(),
+		InBuf:     buffer.NewFixBuffer(),
+		OutBuf:    buffer.NewFixBuffer(),
 		peerAddr:  sockAddrToString(sa),
 		eventLoop: loop,
-		cb: cb,
+		cb:        cb,
 	}
 	conn.connected.Set(true)
-	return conn,nil
+	return conn, nil
 }
-
 
 //func (conn *Connection) SetOnWriteComplete(msgCb callback.WriteCompleteCallback) {
 //	conn.cb.OnWriteComplete = msgCb
@@ -56,14 +53,13 @@ func NewConnection(fd int, loop *EventLoop, sa syscall.Sockaddr, cb Callback) (*
 //	conn.cb.OnClose = msgCb
 //}
 
-
 func (conn *Connection) Fd() int {
 	return conn.connFd
 }
 
 /**
- 需要队列化关闭吗???
- */
+需要队列化关闭吗???
+*/
 func (conn *Connection) Close() error {
 	if !conn.connected.Get() {
 		return mdgoErr.ErrConnectionClosed
@@ -86,8 +82,8 @@ func (conn *Connection) SendByte(out []byte) error {
 }
 
 /**
-	需要队列化发送吗？
- */
+需要队列化发送吗？
+*/
 func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 	if conn.OutBuf.ReadableBytes() > 0 {
 		conn.OutBuf.Append(out)
@@ -97,12 +93,12 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 			// EAGAIN 说明没有数据空间，可以写入
 			// n个字节追加到缓冲区
 			/*
-			普通做法：
-			当需要向socket写数据时，将该socket加入到epoll等待可写事件。接收到socket可写事件后，调用write()或send()发送数据，当数据全部写完后， 将socket描述符移出epoll列表，这种做法需要反复添加和删除。
+				普通做法：
+				当需要向socket写数据时，将该socket加入到epoll等待可写事件。接收到socket可写事件后，调用write()或send()发送数据，当数据全部写完后， 将socket描述符移出epoll列表，这种做法需要反复添加和删除。
 
-			改进做法:
-			向socket写数据时直接调用send()发送，当send()返回错误码EAGAIN，才将socket加入到epoll，等待可写事件后再发送数据，全部数据发送完毕，再移出epoll模型，改进的做法相当于认为socket在大部分时候是可写的，不能写了再让epoll帮忙监控。上面两种做法是对LT模式下write事件频繁通知的修复，本质上ET模式就可以直接搞定，并不需要用户层程序的补丁操作。
-			 */
+				改进做法:
+				向socket写数据时直接调用send()发送，当send()返回错误码EAGAIN，才将socket加入到epoll，等待可写事件后再发送数据，全部数据发送完毕，再移出epoll模型，改进的做法相当于认为socket在大部分时候是可写的，不能写了再让epoll帮忙监控。上面两种做法是对LT模式下write事件频繁通知的修复，本质上ET模式就可以直接搞定，并不需要用户层程序的补丁操作。
+			*/
 			if err != syscall.EAGAIN { /// 此时 n == -1
 				rerr = conn.handleClose()
 				return
@@ -134,17 +130,17 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 	fmt.Println("Connection HandleEvent")
 	fmt.Println("Connection-fd:", conn.Fd())
-	fmt.Println("eve: ",eve)
+	fmt.Println("eve: ", eve)
 
 	conn.activeTime.Swap(time.Now().Unix())
 
 	var err error
-	if eve & event.EventError != 0 {
+	if eve&event.EventError != 0 {
 		conn.handleError(conn.Fd())
 		// TODO close conn
 	}
 
-	if eve & event.EventRead != 0 {
+	if eve&event.EventRead != 0 {
 		err = conn.handleRead(nowUnix)
 		if err != nil {
 			fmt.Println("handleRead-err: ", err)
@@ -152,7 +148,7 @@ func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
 		}
 	}
 
-	if eve & event.EventWrite != 0 {
+	if eve&event.EventWrite != 0 {
 		err = conn.handleWrite(conn.Fd())
 		if err != nil {
 			fmt.Println("handleWrite-err: ", err)
@@ -189,7 +185,6 @@ func (conn *Connection) handleRead(nowUnix int64) error {
 	} else {
 		conn.handleError(conn.Fd())
 	}
-
 
 	// 读取数据
 
@@ -287,8 +282,6 @@ func (conn *Connection) ShutdownWrite() error {
 	conn.connected.Set(false)
 	return syscall.Shutdown(conn.Fd(), syscall.SHUT_WR)
 }
-
-
 
 func sockAddrToString(sa syscall.Sockaddr) string {
 	switch sa := (sa).(type) {

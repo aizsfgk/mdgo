@@ -72,7 +72,7 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		subLoops := make([]*EventLoop, serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := NewEventLoop()
-			loop.LoopId = "subReactor-IDX-" + strconv.Itoa(i)
+			loop.LoopId = "subReactor_idx_" + strconv.Itoa(i)
 			if err != nil {
 				fmt.Println("NewEventLoop sub err: ", err.Error())
 				for j := 0; j < i; j++ {

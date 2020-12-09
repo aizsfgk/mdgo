@@ -42,23 +42,24 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		err = mdgoErr.HandlerIsNil
 		return
 	}
-	option := newOption(optionCbs...)
-	serv = new(Server)
 
+	// new server
+	serv = new(Server)
 	serv.handler = handler
-	serv.option = option
+	serv.option = newOption(optionCbs...)
 	serv.mainLoop, err = NewEventLoop()
 	if err != nil {
 		_ = serv.mainLoop.Stop
 		return nil, err
 	}
-	serv.mainLoop.LoopId = "main"
+	serv.mainLoop.LoopId = "mainReactor"
 
-	l, err := NewListener(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
+	// new listener
+	listener, err := NewListener(serv.option.Network, serv.option.Addr, serv.option.ReusePort, serv.mainLoop, serv.handleNewConnection)
 	if err != nil {
 		return nil, err
 	}
-	if err = serv.mainLoop.AddSocketAndEnableRead(l.Fd(), l); err != nil {
+	if err = serv.mainLoop.AddSocketAndEnableRead(listener.Fd(), listener); err != nil {
 		return nil, err
 	}
 
@@ -66,25 +67,22 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 		serv.option.NumLoop = runtime.NumCPU()
 	}
 
+	// new sub eventLoop
 	if serv.option.NumLoop > 0 {
-
-		wloops := make([]*EventLoop, serv.option.NumLoop)
-		fmt.Println("sss-serv.option.NumLoop: ", serv.option.NumLoop)
+		subLoops := make([]*EventLoop, serv.option.NumLoop)
 		for i := 0; i < serv.option.NumLoop; i++ {
 			loop, err := NewEventLoop()
-			loop.LoopId = "sub-idx-" + strconv.Itoa(i)
+			loop.LoopId = "subReactor-IDX-" + strconv.Itoa(i)
 			if err != nil {
-				fmt.Println("wloops-err:", wloops)
+				fmt.Println("NewEventLoop sub err: ", err.Error())
 				for j := 0; j < i; j++ {
-					wloops[i].Stop()
+					_ = subLoops[i].Stop()
 				}
 				return nil, err
 			}
-			wloops[i] = loop
+			subLoops[i] = loop
 		}
-
-		fmt.Println("wloops:len:", wloops)
-		serv.workLoops = wloops
+		serv.workLoops = subLoops
 	}
 
 	return
@@ -92,38 +90,38 @@ func NewServer(handler Handler, optionCbs ...OptionCallback) (serv *Server, err 
 
 // 启动服务器
 func (serv *Server) Start() (err error) {
-	fmt.Println("server start")
+	fmt.Println("Server Start ...")
 
-	// TODO 抽象化处理wg
+	// subReactor Loop
 	for i := 0; i < serv.option.NumLoop; i++ {
 		serv.wg.Add(1)
 		go func(idx int) {
 			defer serv.wg.Done()
-			serv.worksLoop[idx].Loop()
+			serv.workLoops[idx].Loop()
 		}(i)
 	}
 
+	// mainReactor Loop
 	serv.wg.Add(1)
 	go func() {
 		defer serv.wg.Done()
 		serv.mainLoop.Loop()
 	}()
-
 	serv.wg.Wait()
-	fmt.Println("server stop")
+
+	fmt.Println("Server Start End ...")
 	return
 }
 
 // 停止服务器
 func (serv *Server) Stop() {
-
 	if err := serv.mainLoop.Stop(); err != nil {
 		fmt.Println("mainLoop Stop err: ", err)
 		return
 	}
 
-	for _, lp := range serv.worksLoop {
-		lp.Stop()
+	for _, wlp := range serv.workLoops {
+		_ = wlp.Stop()
 	}
 	return
 }
@@ -131,34 +129,31 @@ func (serv *Server) Stop() {
 // ******************** private method ******************** //
 
 // 获取NextLoop
-func (serv *Server) nextLoop() *EventLoop {
+func (serv *Server) nextEventLoop() *EventLoop {
 	if serv.option.NumLoop == 0 {
 		return serv.mainLoop
 	}
-	loop := serv.worksLoop[serv.nextLoopIndex]
-	serv.nextLoopIndex = (serv.nextLoopIndex + 1) % len(serv.worksLoop)
+	loop := serv.workLoops[serv.nextLoopIndex]
+	serv.nextLoopIndex = (serv.nextLoopIndex + 1) % len(serv.workLoops)
 	return loop
 }
 
 // 新到连接处理
 func (serv *Server) handleNewConnection(fd int, sa syscall.Sockaddr) error {
-	fmt.Println("handleNewConnection start")
-	loop := serv.nextLoop()
 
-	fmt.Println("loop: ", loop)
+	// get next eventLoop
+	loop := serv.nextEventLoop()
 
-	// 新建连接
-	//
-	// Connection 是对 TCP连接的抽象
+	// new connection
 	conn, err := NewConnection(fd, loop, sa, serv.handler)
-
 	if err != nil {
-		fmt.Println("handleNewConnection:err: ", err)
+		fmt.Println("NewConnection err: ", err.Error())
 		return err
 	}
 
-	// cb1 ： 执行回调
+	// cb: OnConnection
 	serv.handler.OnConnection(conn)
 
+	// register event[Read]
 	return loop.AddSocketAndEnableRead(fd, conn)
 }

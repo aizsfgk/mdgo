@@ -13,8 +13,8 @@ import (
 type HandlerConnFunc func(fd int, sa syscall.Sockaddr) error
 
 type Listener struct {
-	file *os.File
 	listenFd int
+	file *os.File
 	handleC HandlerConnFunc
 	listener net.Listener
 	loop *EventLoop

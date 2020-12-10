@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 func Start(i int, msg string) {
 	conn, err := net.Dial("tcp", ":19292")
 	if err != nil {
@@ -38,7 +37,7 @@ func Start(i int, msg string) {
 }
 
 func main() {
-	for i:=0; i<10024; i++ {
+	for i := 0; i < 10024; i++ {
 		go Start(i, "hello-echo")
 	}
 

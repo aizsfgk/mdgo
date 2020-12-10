@@ -1,5 +1,7 @@
 package poller
 
+import _const "github.com/aizsfgk/mdgo/net/const"
+
 var (
-	WaitEventsBegin = 4
+	WaitEventsBegin = _const.PollWaitEventsSize
 )

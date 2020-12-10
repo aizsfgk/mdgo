@@ -14,24 +14,26 @@ import (
 	"github.com/aizsfgk/mdgo/net/event"
 )
 
+// 定义回调接口
 type Callback interface {
 	OnMessage(*Connection, int64)
 	OnClose()
 	OnWriteComplete()
 }
 
+// 定义连接
 type Connection struct {
-	connFd    int               // acceptFd
-	connected atomic.Bool       // state[connected or not]
-	InBuf     *buffer.FixBuffer // input buffer
-	OutBuf    *buffer.FixBuffer // output buffer
-
-	cb         Callback     // cb
-	peerAddr   string       // remote addr
-	eventLoop  *EventLoop   // work sub eventloop
-	activeTime atomic.Int64 // last active time
+	connFd     int               // acceptFd
+	connected  atomic.Bool       // state[connected or not]
+	InBuf      *buffer.FixBuffer // input buffer
+	OutBuf     *buffer.FixBuffer // output buffer
+	cb         Callback          // cb
+	peerAddr   string            // remote addr
+	eventLoop  *EventLoop        // work sub eventLoop
+	activeTime atomic.Int64      // last active time
 }
 
+// 新建连接
 func NewConnection(fd int, loop *EventLoop, sa syscall.Sockaddr, cb Callback) (*Connection, error) {
 	conn := &Connection{
 		connFd:    fd,
@@ -57,9 +59,11 @@ func (conn *Connection) Fd() int {
 	return conn.connFd
 }
 
-/**
-需要队列化关闭吗???
-*/
+//
+// export api func
+//
+
+// close
 func (conn *Connection) Close() error {
 	if !conn.connected.Get() {
 		return mdgoErr.ErrConnectionClosed
@@ -67,6 +71,7 @@ func (conn *Connection) Close() error {
 	return conn.handleClose()
 }
 
+// send
 func (conn *Connection) SendString(out string) error {
 	return conn.SendByte([]byte(out))
 }
@@ -76,15 +81,15 @@ func (conn *Connection) SendByte(out []byte) error {
 		return mdgoErr.ErrConnectionClosed
 	}
 
-	_ = conn.SendInLoop(out)
-
+	_ = conn.Send(out)
 	return nil
 }
 
-/**
-需要队列化发送吗？
-*/
-func (conn *Connection) SendInLoop(out []byte) (rerr error) {
+
+// 直接写回
+// 如果输出缓冲不是空
+// TODO 或者正在关注写事件，则追加数据
+func (conn *Connection) Send(out []byte) (rerr error) {
 	if conn.OutBuf.ReadableBytes() > 0 {
 		conn.OutBuf.Append(out)
 	} else {
@@ -93,23 +98,22 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 			// EAGAIN 说明没有数据空间，可以写入
 			// n个字节追加到缓冲区
 			/*
-				普通做法：
-				当需要向socket写数据时，将该socket加入到epoll等待可写事件。接收到socket可写事件后，调用write()或send()发送数据，当数据全部写完后， 将socket描述符移出epoll列表，这种做法需要反复添加和删除。
+			普通做法：
+			当需要向socket写数据时，将该socket加入到epoll等待可写事件。接收到socket可写事件后，调用write()或send()发送数据，当数据全部写完后， 将socket描述符移出epoll列表，这种做法需要反复添加和删除。
 
-				改进做法:
-				向socket写数据时直接调用send()发送，当send()返回错误码EAGAIN，才将socket加入到epoll，等待可写事件后再发送数据，全部数据发送完毕，再移出epoll模型，改进的做法相当于认为socket在大部分时候是可写的，不能写了再让epoll帮忙监控。上面两种做法是对LT模式下write事件频繁通知的修复，本质上ET模式就可以直接搞定，并不需要用户层程序的补丁操作。
+			改进做法:
+			向socket写数据时直接调用send()发送，当send()返回错误码EAGAIN，才将socket加入到epoll，等待可写事件后再发送数据，全部数据发送完毕，再移出epoll模型，改进的做法相当于认为socket在大部分时候是可写的，不能写了再让epoll帮忙监控。上面两种做法是对LT模式下write事件频繁通知的修复，本质上ET模式就可以直接搞定，并不需要用户层程序的补丁操作。
 			*/
-			if err != syscall.EAGAIN { /// 此时 n == -1
+			if err != syscall.EAGAIN {
 				rerr = conn.handleClose()
 				return
 			}
-
-			fmt.Println("SendInLoop-EAGAIN-err: ", err)
+			fmt.Println("write fd err: ", err)
 		}
 
-		fmt.Println("SendInLoop: n: ", n)
-
+		// some condition, append bytes to out buffer
 		if n < len(out) {
+			fmt.Println("write fd, n: ", n)
 			if n == 0 {
 				conn.OutBuf.Append(out)
 			} else {
@@ -117,21 +121,16 @@ func (conn *Connection) SendInLoop(out []byte) (rerr error) {
 			}
 		}
 
+		// if out buffer has readable byte, enable fd write event
 		if conn.OutBuf.ReadableBytes() > 0 {
-
-			// 激活写
-			//
 			return conn.eventLoop.EnableReadWrite(conn.Fd())
 		}
 	}
 	return nil
 }
 
+// ********* handle Event *********** //
 func (conn *Connection) HandleEvent(eve event.Event, nowUnix int64) error {
-	fmt.Println("Connection HandleEvent")
-	fmt.Println("Connection-fd:", conn.Fd())
-	fmt.Println("eve: ", eve)
-
 	conn.activeTime.Swap(time.Now().Unix())
 
 	var err error

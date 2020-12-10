@@ -3,5 +3,4 @@
 package poller
 
 type Poller struct {
-
 }

@@ -8,7 +8,7 @@ import (
 
 const (
 	cheapPrepend = 8
-	kInitSize = 1024
+	kInitSize    = 1024
 )
 
 // A buffer class modeled after org.jboss.netty.buffer.ChannelBuffer
@@ -21,8 +21,8 @@ const (
 // 0      <=      readerIndex   <=   writerIndex    <=     size
 
 type FixBuffer struct {
-	ri int
-	wi int
+	ri  int
+	wi  int
 	buf []byte
 }
 
@@ -96,7 +96,6 @@ func (f *FixBuffer) PrependableBytes() int {
 	return f.ri
 }
 
-
 // *************** retrieve *************** //
 func (f *FixBuffer) Retrieve(len int) {
 	if len > f.ReadableBytes() { // FIXME Error
@@ -146,8 +145,6 @@ func (f *FixBuffer) RetrieveAsBytes(len int) (ret []byte) {
 	}
 	return
 }
-
-
 
 // ************** write / append **************** //
 func (f *FixBuffer) Append(b []byte) {
@@ -228,7 +225,7 @@ func (f *FixBuffer) ReadUint8() uint8 {
 
 func (f *FixBuffer) PeekAll() (b []byte) {
 	if f.ReadableBytes() > 0 {
-		b = f.buf[f.ri: f.wi]
+		b = f.buf[f.ri:f.wi]
 	}
 	return
 }
@@ -240,7 +237,7 @@ func (f *FixBuffer) Peek(len int) (b []byte) {
 	if len > f.ReadableBytes() { // log error
 		return
 	}
-	b = f.buf[f.ri: f.ri+len]
+	b = f.buf[f.ri : f.ri+len]
 	return
 }
 
@@ -277,7 +274,6 @@ func (f *FixBuffer) PeekUint8() uint8 {
 
 }
 
-
 // ******************* prepend **************** //
 
 func (f *FixBuffer) Prepend(b []byte) {
@@ -311,14 +307,3 @@ func (f *FixBuffer) PrependUint16(x uint16) {
 func (f *FixBuffer) PrependUint8(x uint8) {
 	f.Prepend([]byte{x})
 }
-
-
-
-
-
-
-
-
-
-
-

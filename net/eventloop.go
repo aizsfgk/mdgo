@@ -4,92 +4,98 @@ import (
 	"fmt"
 
 	"github.com/aizsfgk/mdgo/base/atomic"
+	_const "github.com/aizsfgk/mdgo/net/const"
 	"github.com/aizsfgk/mdgo/net/event"
 	"github.com/aizsfgk/mdgo/net/poller"
 )
 
-type SocketCtx interface {
+// socket context
+// 1. listener
+// 2. connection
+type SocketContext interface {
 	Close() error
 	HandleEvent(eve event.Event, nowUnix int64) error
 }
 
 // 事件循环
 type EventLoop struct {
-	Poll      *poller.Poller
-	LoopId    string
-	socketCtx map[int]SocketCtx // 连接和对应的处理程序
-
-	looping       atomic.Bool
-	quit          atomic.Bool
-	eventHandling atomic.Bool
+	Poll          *poller.Poller        // net poller
+	LoopId        string                // identify
+	socketCtx     map[int]SocketContext // fd <-> SocketContext
+	quit          atomic.Bool           // is quit
+	eventHandling atomic.Bool           // is handle event
 }
 
+// New/Loop/Stop
+// Enable Read/Write/ReadWrite
+// DeleteInLoop
+
+// new EventLoop
 func NewEventLoop() (el *EventLoop, err error) {
-	fmt.Println("create Poller")
-	p, err := poller.Create()
+	poll, err := poller.Create()
 	if err != nil {
 		return nil, err
 	}
 	return &EventLoop{
-		Poll:      p,
-		socketCtx: make(map[int]SocketCtx, 1024),
+		Poll:      poll,
+		socketCtx: make(map[int]SocketContext, _const.SocketContextSize),
 	}, nil
 }
 
-func (el *EventLoop) AddSocketAndEnableRead(fd int, sc SocketCtx) error {
-
+// first add and enable read
+func (el *EventLoop) AddSocketAndEnableRead(fd int, sckCtx SocketContext) error {
 	var err error
-	el.socketCtx[fd] = sc
 
+	el.socketCtx[fd] = sckCtx
 	if err = el.Poll.Add(fd, event.EventRead); err != nil {
-		fmt.Println("el.Poll.Add err: ", err)
-		el.Poll.Del(fd)
+		_ = el.Poll.Del(fd)
 		return err
 	}
 	return nil
 }
 
+// stop eventLoop
 func (el *EventLoop) Stop() error {
 	for fd, sc := range el.socketCtx {
 		if err := sc.Close(); err != nil {
-			fmt.Println("Stop-err: ", err)
+			fmt.Println("sc close err")
 		}
 		delete(el.socketCtx, fd)
 	}
 	return el.Poll.Close()
 }
 
-func (el *EventLoop) debugPrintf(evs *[]event.EventHolder) {
-	fmt.Printf("\n==========================\n")
-	fmt.Printf(" revent-print: \n")
-	for _, ev := range *evs {
-		if ev.Fd > 0 {
-			fmt.Printf("fd: %d => events: %s\n", ev.Fd, ev.Event2String())
+// debugPrintf
+func (el *EventLoop) debugPrintf(evhs *[]event.EventHolder) {
+	fmt.Println("==========================")
+	fmt.Println("return Event: ")
+	for _, evh := range *evhs {
+		if evh.Fd > 0 {
+			fmt.Printf("fd: %d => events: %s\n", evh.Fd, evh.Event2String())
 		}
 	}
-	fmt.Printf("==========================\n")
+	fmt.Println("==========================")
 }
 
 // 开启事件循环
 func (el *EventLoop) Loop() {
-	fmt.Println("eventLoop Loop begin; idx： ", el.LoopId)
-
-	el.looping.Set(true)
+	fmt.Println("<<< eventLoop Loop begin; LoopId: ", el.LoopId, ">>>")
 
 	for !el.quit.Get() {
-		activeConn := make([]event.EventHolder, poller.WaitEventsBegin)
-		nowUnix, n := el.Poll.Poll(1000, &activeConn)
-		fmt.Println("idx: ", el.LoopId, " 返回")
+		activeEvents := make([]event.EventHolder, poller.WaitEventsBegin)
+		nowUnix, n := el.Poll.Poll(_const.PollWaitMillisecond, &activeEvents)
+
+		fmt.Println("return eventLoop; LoopId: ", el.LoopId, "; unix timestamp: ", nowUnix)
 
 		if n > 0 {
-			el.debugPrintf(&activeConn)
+			el.debugPrintf(&activeEvents)
 
-			el.eventHandling.Set(true) // 开启事件处理
-			for _, curEv := range activeConn {
-				if sc, ok := el.socketCtx[curEv.Fd]; ok {
-					err := sc.HandleEvent(curEv.Revent, nowUnix)
+			el.eventHandling.Set(true)
+			for _, curEvent := range activeEvents {
+				if sc, ok := el.socketCtx[curEvent.Fd]; ok {
+					err := sc.HandleEvent(curEvent.Revent, nowUnix)
 					if err != nil {
-						fmt.Println("handler activeConn: err: ", err)
+						fmt.Println("sc.HandleEvent err: ", err.Error())
 					}
 				}
 			}
@@ -97,8 +103,7 @@ func (el *EventLoop) Loop() {
 		}
 	}
 
-	fmt.Println("eventLoop Loop end...")
-	el.looping.Set(false)
+	fmt.Println("<<< eventLoop loop end >>>")
 	return
 }
 
@@ -115,9 +120,11 @@ func (el *EventLoop) EnableReadWrite(fd int) error {
 }
 
 func (el *EventLoop) DeleteInLoop(fd int) {
-	// 剔除事件循环
+	// delete from eventLoop Poll
 	if err := el.Poll.Del(fd); err != nil {
 		fmt.Println("[DeleteFdInLoop]", err)
 	}
+
+	// delete from socketContext
 	delete(el.socketCtx, fd)
 }

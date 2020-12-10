@@ -14,7 +14,7 @@ func (e *echoHandler) OnEventLoopInit(conn *net.Connection) {
 	fmt.Println("OnEventLoopInit")
 }
 
-func (e *echoHandler)  OnConnection(conn *net.Connection) {
+func (e *echoHandler) OnConnection(conn *net.Connection) {
 	fmt.Println("OnConnection")
 }
 
@@ -34,12 +34,11 @@ func (e *echoHandler) OnClose() {
 	fmt.Println("OnClose")
 }
 
-func main()  {
-
+func main() {
 
 	var eh = &echoHandler{}
-	serv, err := net.NewServer(eh, net.ReusePort(true), net.KeepAlive(10 * time.Minute), net.NumLoop(2))
-	if err != nil{
+	serv, err := net.NewServer(eh, net.ReusePort(true), net.KeepAlive(10*time.Minute), net.NumLoop(2))
+	if err != nil {
 		fmt.Println("server-err: ", err)
 		return
 	}
@@ -47,5 +46,5 @@ func main()  {
 	if err := serv.Start(); err != nil {
 		fmt.Println("err: ", err)
 	}
-	
+
 }

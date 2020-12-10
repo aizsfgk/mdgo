@@ -46,10 +46,27 @@ type Listener struct {
 }
 ~~~
 
-`listener`是监听套接字的处理模块，对于监听套接字，事件循环只处理`可读事件`,当监听套接字可读，即表示可以使用`accept`来获取已连接套接字，也表示`TCP三次握手完成`。之后将`acceptFd`嵌入`Connection`。
+`Listener`是监听套接字的处理模块，对于监听套接字，事件循环只处理`可读事件`,当监听套接字可读，即表示可以使用`accept`来获取已连接套接字，也表示`TCP三次握手完成`。之后将`acceptFd`嵌入`Connection`。
 
 ~~~go
-
+type Connection struct {
+	connFd     int               // acceptFd
+	connected  atomic.Bool       // state[connected or not]
+	InBuf      *buffer.FixBuffer // input buffer
+	OutBuf     *buffer.FixBuffer // output buffer
+	cb         Callback          // cb
+	peerAddr   string            // remote addr
+	eventLoop  *EventLoop        // work sub eventLoop
+	activeTime atomic.Int64      // last active time
+}
 ~~~
+
+`Connection`是已连接套接字处理模块，是对`tcp三次握手`的抽象，当三次握手建立完成后，通过`Connection`进行数据的接收和发送，必要的时候对`Connection`进行关闭操作。
+
+综上，通过`Listener`和`Connection`, 处理连接的三个半事件。
+
+### eventLoop.go
+
+`eventLoop`是事件循环的核心，负责新建事件循环，事件循环启动，等待套接字事件就绪。  
 
 

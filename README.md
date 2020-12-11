@@ -69,4 +69,12 @@ type Connection struct {
 
 `eventLoop`是事件循环的核心，负责新建事件循环，事件循环启动，等待套接字事件就绪。  
 
+### eventHolder
+
+`mdgo`封装了自己的`event`包裹器,命名为`eventHolder`, 包含`监听的fd`,`关注的事件`,`已经就绪的事件`。这样就能很好的封装之后的轮询器`poller`。不关系底层，统一暴露`eventHolder`,供事件循环器`eventloop`使用。
+
+### poller
+
+`poller`是轮询器文件夹，根据不同的系统，分装了不同的系统函数，例如`linux`下的`epoll`, `MacOs`下的`kqueue`等。
+
 
